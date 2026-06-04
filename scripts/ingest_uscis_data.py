@@ -1,25 +1,22 @@
 """
-Data Ingestion Pipeline — Loads scraped USCIS data into ChromaDB vector store.
+Data Ingestion Pipeline — Loads USCIS data into ChromaDB vector store.
 
-Usage:
-    cd backend
-    python -m scripts.ingest_uscis_data
-
-Steps:
-    1. Scrape USCIS data (or load from cached JSON)
-    2. Generate embeddings via OpenAI
-    3. Store in ChromaDB
+Usage (from repo root):
+    python scripts/ingest_uscis_data.py
+    python scripts/ingest_uscis_data.py --yes --collection all
 """
 
+import argparse
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
-# Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from dotenv import load_dotenv
+
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -27,10 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def load_sample_data() -> list[dict]:
-    """
-    Load sample immigration knowledge for initial testing.
-    This provides a working knowledge base before real scraping is set up.
-    """
+    """Load sample immigration knowledge for initial testing."""
     sample_documents = [
         {
             "content": (
@@ -48,154 +42,129 @@ def load_sample_data() -> list[dict]:
         },
         {
             "content": (
-                "H-1B Cap and Lottery: Congress has set the H-1B cap at 65,000 per fiscal year, with an "
-                "additional 20,000 for beneficiaries with a US master's degree or higher (advanced degree "
-                "exemption). Cap-subject petitions must be registered during the annual registration period, "
-                "typically in March. If registrations exceed the cap, USCIS conducts a random lottery. "
-                "Cap-exempt employers include institutions of higher education, nonprofit research organizations, "
-                "and governmental research organizations."
+                "H-1B Transfer (Change of Employer): An H-1B worker may begin working for a new employer "
+                "upon filing a new I-129 petition with USCIS, under H-1B portability provisions. "
+                "The new employer must file Form I-129 before the worker's authorized stay expires. "
+                "Required documents include: offer letter, LCA, pay stubs from current employer, "
+                "I-94, passport copies, and degree credentials."
             ),
             "source": "USCIS Policy Manual",
-            "section": "H-1B Cap Season",
+            "section": "H-1B Portability",
             "doc_type": "policy",
             "url": "https://www.uscis.gov/working-in-the-united-states/h-1b-specialty-occupations",
         },
         {
             "content": (
-                "H-1B Transfer (Portability): Under AC21, an H-1B worker can begin working for a new employer "
-                "as soon as the new employer files an H-1B petition (I-129), without waiting for approval. "
-                "The worker must have been lawfully admitted, the new petition must be non-frivolous, and the "
-                "worker must not have worked without authorization. This is commonly called H-1B transfer or "
-                "portability. The new employer must file a new Labor Condition Application (LCA)."
-            ),
-            "source": "USCIS Policy Manual - AC21",
-            "section": "H-1B Portability",
-            "doc_type": "policy",
-            "url": "https://www.uscis.gov/policy-manual/volume-2-part-h",
-        },
-        {
-            "content": (
-                "Form I-140 - Immigrant Petition for Alien Workers: Employers use Form I-140 to petition "
-                "for foreign workers under employment-based immigration categories. Categories include: "
-                "EB-1 (Priority Workers - extraordinary ability, outstanding professors/researchers, "
-                "multinational managers), EB-2 (Advanced Degree Professionals or Exceptional Ability, "
-                "including National Interest Waiver), EB-3 (Skilled Workers, Professionals, and Other Workers). "
-                "Filing fee varies by category. Premium Processing is available for an additional fee."
+                "Form I-485 Adjustment of Status: Form I-485 is used to apply for lawful permanent "
+                "resident status (green card) while in the United States. Required documents typically "
+                "include: birth certificate, passport photos, I-94, medical examination (I-693), "
+                "affidavit of support (I-864) if family-based, employment authorization (I-765) optional, "
+                "advance parole (I-131) optional, and filing fee."
             ),
             "source": "USCIS Form Instructions",
-            "section": "I-140 Overview",
-            "doc_type": "form_instruction",
-            "url": "https://www.uscis.gov/i-140",
-        },
-        {
-            "content": (
-                "EB-2 National Interest Waiver (NIW): The EB-2 NIW allows foreign nationals to self-petition "
-                "without a job offer or labor certification if they can demonstrate that their work is in the "
-                "national interest of the United States. Under the Matter of Dhanasar framework, petitioners "
-                "must show: (1) the proposed endeavor has substantial merit and national importance, "
-                "(2) the petitioner is well-positioned to advance the proposed endeavor, and (3) on balance, "
-                "it would be beneficial to the US to waive the job offer and labor certification requirements."
-            ),
-            "source": "USCIS Policy Manual",
-            "section": "EB-2 NIW - Dhanasar Framework",
-            "doc_type": "policy",
-            "url": "https://www.uscis.gov/policy-manual/volume-6-part-f-chapter-5",
-        },
-        {
-            "content": (
-                "Form I-485 - Adjustment of Status: Form I-485 is used by individuals who are already in the "
-                "US to apply for lawful permanent resident status (green card). Eligibility generally requires: "
-                "an approved or concurrently filed immigrant petition, an immediately available visa number, "
-                "physical presence in the US, admissibility. Applicants must submit biometrics, undergo a "
-                "medical examination (Form I-693), and may be called for an interview. Filing fees include "
-                "the application fee and biometric services fee."
-            ),
-            "source": "USCIS Form Instructions",
-            "section": "I-485 Adjustment of Status",
-            "doc_type": "form_instruction",
+            "section": "I-485 Application",
+            "doc_type": "form_instructions",
             "url": "https://www.uscis.gov/i-485",
         },
         {
             "content": (
-                "F-1 Optional Practical Training (OPT): F-1 students may apply for OPT to gain practical "
-                "training directly related to their field of study. Pre-completion OPT allows part-time work "
-                "while enrolled. Post-completion OPT provides up to 12 months of full-time employment after "
-                "completing studies. STEM degree holders may apply for a 24-month STEM OPT extension, for a "
-                "total of 36 months. Students must file Form I-765 to apply for an Employment Authorization "
-                "Document (EAD). The 60-day grace period after OPT ends allows for departure or change of status."
+                "EB-2 National Interest Waiver (NIW): The EB-2 NIW allows self-petition without employer "
+                "sponsorship if the applicant's work is in the national interest. Criteria include: "
+                "advanced degree or exceptional ability, proposed endeavor of substantial merit and "
+                "national importance, well-positioned to advance the endeavor, and balance of factors "
+                "favors waiving job offer and labor certification requirements (Matter of Dhanasar)."
             ),
             "source": "USCIS Policy Manual",
-            "section": "F-1 OPT and STEM OPT",
+            "section": "EB-2 NIW",
             "doc_type": "policy",
-            "url": "https://www.uscis.gov/working-in-the-united-states/students-and-exchange-visitors/optional-practical-training-opt-for-f-1-students",
+            "url": "https://www.uscis.gov/working-in-the-united-states/permanent-workers/employment-based-immigration-second-preference-eb-2",
         },
         {
             "content": (
-                "Request for Evidence (RFE) Overview: USCIS issues an RFE when additional evidence is needed "
-                "to make a decision on a petition or application. An RFE is not a denial — it's an opportunity "
-                "to provide additional documentation. Common RFE reasons include: insufficient evidence of "
-                "specialty occupation (H-1B), inadequate proof of qualifications, missing supporting documents, "
-                "and questions about the employer-employee relationship. Response deadlines typically range from "
-                "30 to 87 days. Failure to respond results in denial based on the existing record."
+                "F-1 OPT (Optional Practical Training): F-1 students may apply for OPT to work in their "
+                "field of study. Standard OPT is 12 months; STEM OPT extension adds 24 months for eligible "
+                "STEM degrees. Apply up to 90 days before program end, within 60 days after. File Form I-765 "
+                "with fee, photos, I-20 with OPT recommendation, and prior EAD if applicable."
             ),
             "source": "USCIS Policy Manual",
-            "section": "Request for Evidence",
+            "section": "F-1 OPT",
             "doc_type": "policy",
-            "url": "https://www.uscis.gov/policy-manual/volume-1-part-e-chapter-6",
+            "url": "https://www.uscis.gov/opt",
         },
         {
             "content": (
-                "Green Card through Employment: The employment-based green card process typically involves "
-                "three main steps: (1) PERM Labor Certification — employer demonstrates no qualified US workers "
-                "available (not required for EB-1 or NIW), (2) I-140 Immigrant Petition — employer or self-petitioner "
-                "files with USCIS, (3) I-485 Adjustment of Status or Consular Processing — applicant applies for "
-                "permanent residence. Priority dates and visa bulletin cut-off dates determine when each step can "
-                "proceed. Wait times vary significantly by country of birth and preference category."
+                "H-1B Lottery (Cap Registration): USCIS conducts an annual lottery for new H-1B cap-subject "
+                "petitions. Employers register during the registration period (typically March). Selected "
+                "registrations may file I-129 during the filing window. Premium processing available."
             ),
-            "source": "USCIS Policy Manual",
-            "section": "Employment-Based Green Card Process",
+            "source": "USCIS",
+            "section": "H-1B Cap",
             "doc_type": "policy",
-            "url": "https://www.uscis.gov/green-card/green-card-eligibility/green-card-for-employment-based-immigrants",
+            "url": "https://www.uscis.gov/working-in-the-united-states/temporary-workers/h-1b-specialty-occupations",
         },
         {
             "content": (
-                "H-4 EAD (Employment Authorization for H-4 Dependents): Certain H-4 dependent spouses of H-1B "
-                "nonimmigrants may be eligible for employment authorization. To qualify, the H-1B principal must "
-                "be the beneficiary of an approved I-140 petition, OR must have been granted H-1B status under "
-                "sections 106(a) or 104(c) of AC21 (H-1B extensions beyond 6 years). The H-4 spouse files "
-                "Form I-765 with supporting documentation. Processing times vary. The H-4 EAD is valid until "
-                "the expiration of the H-4 status."
+                "Premium Processing: USCIS offers premium processing for certain forms for an additional fee. "
+                "USCIS will take action within 15 business days (or issue refund if not). Available for "
+                "I-129, I-140, I-539, and others when listed on uscis.gov."
             ),
-            "source": "USCIS Policy Manual",
-            "section": "H-4 EAD Eligibility",
-            "doc_type": "policy",
-            "url": "https://www.uscis.gov/working-in-the-united-states/h-4-ead",
-        },
-        {
-            "content": (
-                "Premium Processing Service: USCIS offers premium processing for certain form types, guaranteeing "
-                "a response within 15 business days (or 45 calendar days for some categories). If USCIS fails to "
-                "meet the deadline, it refunds the premium processing fee and continues expedited processing. "
-                "A response can be an approval, denial, RFE, or NOID — the guarantee is processing, not approval. "
-                "Form I-907 is filed concurrently with or after the underlying petition. Premium processing fees "
-                "vary by form type. Available for I-129, I-140, and certain I-539 categories."
-            ),
-            "source": "USCIS Policy Manual",
+            "source": "USCIS",
             "section": "Premium Processing",
             "doc_type": "policy",
-            "url": "https://www.uscis.gov/forms/all-forms/how-do-i-use-premium-processing-service",
+            "url": "https://www.uscis.gov/forms/explore-my-options/premium-processing",
         },
         {
             "content": (
-                "Visa Bulletin and Priority Dates: The Department of State publishes a monthly Visa Bulletin "
-                "showing cutoff dates for each employment-based and family-based preference category by country "
-                "of chargeability. If your priority date is before the cutoff date, a visa number is considered "
-                "available and you may proceed with adjustment of status or consular processing. Two charts are "
-                "published: Final Action Dates and Dates for Filing. USCIS announces monthly which chart to use "
-                "for I-485 filing. India and China EB-2 and EB-3 categories typically have the longest waits."
+                "Request for Evidence (RFE): When USCIS needs more information, it issues an RFE. "
+                "Respond within the deadline (typically 87 days). Failure to respond may result in denial. "
+                "Address each point raised with supporting evidence. RFE responses are critical legal documents."
             ),
-            "source": "USCIS/DOS",
-            "section": "Visa Bulletin",
+            "source": "USCIS Policy Manual",
+            "section": "RFE Response",
+            "doc_type": "policy",
+            "url": "https://www.uscis.gov/policy-manual",
+        },
+        {
+            "content": (
+                "L-1 Intracompany Transferee: L-1A for managers/executives, L-1B for specialized knowledge. "
+                "Requires one year employment abroad with qualifying organization in past three years. "
+                "File Form I-129 with supporting corporate documents."
+            ),
+            "source": "USCIS Policy Manual",
+            "section": "L-1 Visa",
+            "doc_type": "policy",
+            "url": "https://www.uscis.gov/working-in-the-united-states/temporary-workers/l-1a-intracompany-transferee-executive-or-manager",
+        },
+        {
+            "content": (
+                "O-1 Extraordinary Ability: For individuals with extraordinary ability in sciences, arts, "
+                "education, business, or athletics. Requires sustained national or international acclaim. "
+                "File I-129 with advisory opinion and evidence of awards, publications, judging, etc."
+            ),
+            "source": "USCIS Policy Manual",
+            "section": "O-1 Visa",
+            "doc_type": "policy",
+            "url": "https://www.uscis.gov/working-in-the-united-states/temporary-workers/o-1-visa-individuals-with-extraordinary-ability-or-achievement",
+        },
+        {
+            "content": (
+                "I-140 Immigrant Petition for Alien Workers: Employer or self-petitioner files I-140 for "
+                "EB-1, EB-2, or EB-3 categories. Includes evidence of ability to pay, PERM labor "
+                "certification (if required), and qualifying credentials."
+            ),
+            "source": "USCIS Form Instructions",
+            "section": "I-140",
+            "doc_type": "form_instructions",
+            "url": "https://www.uscis.gov/i-140",
+        },
+        {
+            "content": (
+                "Visa Bulletin and Priority Dates: The Department of State Visa Bulletin shows when "
+                "immigrant visa numbers are available. Priority date must be current for I-485 filing "
+                "or consular processing. Categories include EB, F, and family preferences."
+            ),
+            "source": "Visa Bulletin",
+            "section": "Priority Dates",
             "doc_type": "policy",
             "url": "https://travel.state.gov/content/travel/en/legal/visa-law0/visa-bulletin.html",
         },
@@ -203,48 +172,72 @@ def load_sample_data() -> list[dict]:
     return sample_documents
 
 
-def ingest_data():
-    """Main ingestion pipeline."""
-    from app.services.rag_service import get_rag_service
-
-    logger.info("=" * 60)
-    logger.info("ImmiAssist AI — Data Ingestion Pipeline")
-    logger.info("=" * 60)
-
-    rag = get_rag_service()
-
-    # Check if already populated
-    existing_count = rag.policy_collection.count()
-    if existing_count > 0:
-        logger.info(f"Knowledge base already has {existing_count} documents.")
-        response = input("Re-ingest? This will clear existing data. (y/N): ")
-        if response.lower() != "y":
-            logger.info("Skipping ingestion.")
-            return
-
-        # Clear existing
-        rag.chroma_client.delete_collection("uscis_policy")
-        rag.policy_collection = rag.chroma_client.get_or_create_collection(
-            name="uscis_policy",
-            metadata={"description": "USCIS Policy Manual, Form Instructions, and Guidance"},
-        )
-        logger.info("Cleared existing collection.")
-
-    # Load data
-    # Try real scraped data first, fall back to samples
+def load_policy_documents() -> list[dict]:
     raw_data_path = Path(__file__).parent.parent / "backend" / "data" / "raw" / "uscis_all_documents.json"
-
     if raw_data_path.exists():
         logger.info("Loading scraped USCIS data...")
         with open(raw_data_path) as f:
-            documents = json.load(f)
-    else:
-        logger.info("No scraped data found. Loading sample knowledge base...")
-        documents = load_sample_data()
+            return json.load(f)
+    logger.info("No scraped data found. Loading sample knowledge base...")
+    return load_sample_data()
 
-    logger.info(f"Loaded {len(documents)} documents for ingestion")
 
-    # Prepare for ChromaDB
+def load_processing_times_documents() -> list[dict]:
+    from data.scrapers.processing_times import get_curated_processing_times
+
+    raw_path = Path(__file__).parent.parent / "backend" / "data" / "raw" / "processing_times.json"
+    if raw_path.exists():
+        with open(raw_path) as f:
+            return json.load(f)
+    return get_curated_processing_times()
+
+
+def record_ingestion_run(collection: str, doc_count: int, status: str) -> None:
+    try:
+        from app.db.base import SessionLocal
+        from app.models.models import IngestionRun
+
+        db = SessionLocal()
+        run = IngestionRun(
+            collection=collection,
+            doc_count=doc_count,
+            status=status,
+            finished_at=datetime.utcnow() if status in ("completed", "failed") else None,
+        )
+        db.add(run)
+        db.commit()
+        db.close()
+    except Exception as e:
+        logger.warning(f"Could not record ingestion run: {e}")
+
+
+def ingest_collection(rag, collection_name: str, documents: list[dict], force: bool = False):
+    collection = (
+        rag.policy_collection
+        if collection_name == "uscis_policy"
+        else rag.timeline_collection
+    )
+
+    existing_count = collection.count()
+    if existing_count > 0 and not force:
+        logger.info(f"{collection_name} already has {existing_count} documents. Skipping.")
+        return existing_count
+
+    if existing_count > 0 and force:
+        rag.chroma_client.delete_collection(collection_name)
+        if collection_name == "uscis_policy":
+            rag.policy_collection = rag.chroma_client.get_or_create_collection(
+                name="uscis_policy",
+                metadata={"description": "USCIS Policy Manual, Form Instructions, and Guidance"},
+            )
+        else:
+            rag.timeline_collection = rag.chroma_client.get_or_create_collection(
+                name="processing_times",
+                metadata={"description": "USCIS Processing Times Data"},
+            )
+
+    record_ingestion_run(collection_name, 0, "running")
+
     texts = [doc["content"] for doc in documents]
     metadatas = [
         {
@@ -255,34 +248,65 @@ def ingest_data():
         }
         for doc in documents
     ]
-    ids = [f"doc_{i:04d}" for i in range(len(documents))]
+    ids = [f"{collection_name}_{i:04d}" for i in range(len(documents))]
 
-    # Ingest into ChromaDB
-    logger.info("Generating embeddings and storing in ChromaDB...")
+    logger.info(f"Ingesting {len(documents)} documents into {collection_name}...")
     rag.add_documents(
         documents=texts,
         metadatas=metadatas,
         ids=ids,
-        collection_name="uscis_policy",
+        collection_name=collection_name,
     )
 
-    # Verify
-    final_count = rag.policy_collection.count()
-    logger.info(f"✅ Ingestion complete! Total documents in knowledge base: {final_count}")
+    final = collection.count()
+    record_ingestion_run(collection_name, final, "completed")
+    logger.info(f"✅ {collection_name}: {final} documents")
+    return final
 
-    # Test retrieval
-    logger.info("\n--- Testing retrieval ---")
-    test_queries = [
-        "How do I transfer my H1B to a new employer?",
-        "What documents do I need for I-485?",
-        "What is the EB-2 NIW process?",
-    ]
-    for query in test_queries:
-        results = rag.retrieve(query, n_results=2)
-        logger.info(f"\nQuery: {query}")
-        for r in results:
-            logger.info(f"  → [{r['metadata']['section']}] (distance: {r['distance']:.3f})")
+
+def ingest_data(force: bool = False, collection: str = "all"):
+    from app.services.rag_service import get_rag_service
+
+    logger.info("=" * 60)
+    logger.info("ImmiAssist AI — Data Ingestion Pipeline")
+    logger.info("=" * 60)
+
+    rag = get_rag_service()
+
+    if collection in ("all", "uscis_policy"):
+        docs = load_policy_documents()
+        ingest_collection(rag, "uscis_policy", docs, force=force)
+
+    if collection in ("all", "processing_times"):
+        docs = load_processing_times_documents()
+        ingest_collection(rag, "processing_times", docs, force=force)
+
+    logger.info("Ingestion complete.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Ingest USCIS data into ChromaDB")
+    parser.add_argument(
+        "--yes", "-y", action="store_true", help="Force re-ingest (clear existing data)"
+    )
+    parser.add_argument(
+        "--collection",
+        choices=["all", "uscis_policy", "processing_times"],
+        default="all",
+        help="Which collection to ingest",
+    )
+    args = parser.parse_args()
+
+    if not args.yes:
+        from app.services.rag_service import get_rag_service
+
+        rag = get_rag_service()
+        if rag.policy_collection.count() > 0:
+            logger.info("Knowledge base already populated. Use --yes to force re-ingest.")
+            return
+
+    ingest_data(force=args.yes, collection=args.collection)
 
 
 if __name__ == "__main__":
-    ingest_data()
+    main()

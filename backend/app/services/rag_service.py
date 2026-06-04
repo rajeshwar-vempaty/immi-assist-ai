@@ -17,6 +17,7 @@ from chromadb.config import Settings as ChromaSettings
 from openai import OpenAI
 
 from app.core.config import get_settings
+from app.utils.citations import format_inline_citation
 
 logger = logging.getLogger(__name__)
 
@@ -164,9 +165,10 @@ class RAGService:
             source_name = doc["metadata"].get("source", "USCIS Document")
             section = doc["metadata"].get("section", "")
             source_label = f"{source_name} — {section}" if section else source_name
+            inline = format_inline_citation(source_label, i)
 
             context_parts.append(
-                f"[Source {i}: {source_label}]\n{doc['document']}\n"
+                f"{inline}\n{doc['document']}\n"
             )
             sources.append(source_label)
 
