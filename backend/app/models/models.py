@@ -81,6 +81,16 @@ class UsageEvent(Base):
     user: Mapped["User | None"] = relationship(back_populates="usage_events")
 
 
+class RegistrationLog(Base):
+    __tablename__ = "registration_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    ip_address: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
 class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
 

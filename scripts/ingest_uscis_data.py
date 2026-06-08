@@ -258,7 +258,11 @@ def ingest_collection(rag, collection_name: str, documents: list[dict], force: b
         collection_name=collection_name,
     )
 
-    final = collection.count()
+    final = (
+        rag.policy_collection.count()
+        if collection_name == "uscis_policy"
+        else rag.timeline_collection.count()
+    )
     record_ingestion_run(collection_name, final, "completed")
     logger.info(f"✅ {collection_name}: {final} documents")
     return final
@@ -284,10 +288,27 @@ def ingest_data(force: bool = False, collection: str = "all"):
     logger.info("Ingestion complete.")
 
 
+def run_scrape() -> None:
+    """Run USCIS scrape pipeline before ingest."""
+    import subprocess
+
+    scrape_script = Path(__file__).parent / "scrape_uscis_data.py"
+    logger.info("Running USCIS scrape pipeline...")
+    result = subprocess.run(
+        [sys.executable, str(scrape_script)],
+        cwd=str(Path(__file__).parent.parent),
+    )
+    if result.returncode != 0:
+        logger.warning("Scrape pipeline failed; falling back to cached/sample data.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Ingest USCIS data into ChromaDB")
     parser.add_argument(
         "--yes", "-y", action="store_true", help="Force re-ingest (clear existing data)"
+    )
+    parser.add_argument(
+        "--scrape", action="store_true", help="Run USCIS scraper before ingest"
     )
     parser.add_argument(
         "--collection",
@@ -296,6 +317,9 @@ def main():
         help="Which collection to ingest",
     )
     args = parser.parse_args()
+
+    if args.scrape:
+        run_scrape()
 
     if not args.yes:
         from app.services.rag_service import get_rag_service

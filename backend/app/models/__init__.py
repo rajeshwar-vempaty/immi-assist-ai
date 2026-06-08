@@ -5,6 +5,7 @@ from app.models.models import (
     ChatMessage,
     ChatSession,
     IngestionRun,
+    RegistrationLog,
     UsageEvent,
     User,
 )
@@ -15,5 +16,6 @@ __all__ = [
     "ChatSession",
     "ChatMessage",
     "UsageEvent",
+    "RegistrationLog",
     "IngestionRun",
 ]

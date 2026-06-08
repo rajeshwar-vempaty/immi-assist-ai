@@ -47,6 +47,18 @@ class Settings(BaseSettings):
     # Admin
     admin_api_key: Optional[str] = None
 
+    # Auth hardening
+    allow_public_registration: bool = False
+    max_api_keys_per_user: int = 3
+    max_registrations_per_ip_per_day: int = 3
+
+    # Knowledge base
+    min_knowledge_base_documents: int = 10
+
+    # LLM resilience
+    llm_timeout_seconds: int = 60
+    llm_max_retries: int = 2
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]

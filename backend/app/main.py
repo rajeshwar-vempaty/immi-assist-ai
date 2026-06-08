@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import admin, auth, chat, checklist, health, rfe, timeline
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
+from app.core.validation import validate_production_settings
 from app.db.init_db import init_db
 from app.middleware.request_id import RequestIDMiddleware
 
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         logger.info(f"Starting {settings.app_name} in {settings.app_env} mode")
+        validate_production_settings(settings)
         init_db()
 
         missing_keys = []

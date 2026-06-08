@@ -23,6 +23,16 @@ class LLMResponseError(AppError):
         super().__init__(message, status_code=502)
 
 
+class LLMServiceUnavailable(AppError):
+    def __init__(self, message: str = "LLM service is temporarily unavailable."):
+        super().__init__(message, status_code=503)
+
+
+class AuthError(AppError):
+    def __init__(self, message: str, status_code: int = 403):
+        super().__init__(message, status_code=status_code)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError):

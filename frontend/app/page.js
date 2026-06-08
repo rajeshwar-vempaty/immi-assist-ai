@@ -129,13 +129,16 @@ export default function Home() {
 
   const handleRegister = async () => {
     try {
-      const result = await registerUser(null, "starter");
+      const result = await registerUser(null, "free");
       setApiKeyInput(result.api_key);
       setApiKey(result.api_key);
       setError(null);
-      alert(`API key created. Daily limit: ${result.daily_limit}`);
+      alert(`API key created (tier: ${result.tier}). Daily limit: ${result.daily_limit}`);
     } catch (e) {
-      setError(e.message);
+      setError(
+        e.message ||
+          "Registration requires admin authorization in production. Contact your administrator."
+      );
     }
   };
 

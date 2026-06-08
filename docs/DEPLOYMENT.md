@@ -38,15 +38,35 @@ cd frontend && npm run dev
 ## API Authentication
 
 - **Anonymous**: Send `X-Session-ID` header (returned on first response) for rate limiting
-- **Registered**: `POST /api/v1/auth/register` → use returned `api_key` as `X-API-Key` header
-- **Admin ingest**: Set `ADMIN_API_KEY` in `.env`, call `POST /api/v1/admin/ingest` with `X-Admin-Key`
+- **Registered**: `POST /api/v1/auth/register` with `X-Admin-Key` header (production default)
+- **Dev only**: Set `ALLOW_PUBLIC_REGISTRATION=true` for self-service free-tier keys (capped per IP)
+- **Key management**: `GET /auth/keys`, `POST /auth/keys`, `DELETE /auth/keys/{id}` (authenticated)
+- **Admin**: `POST /api/v1/admin/scrape`, `POST /api/v1/admin/ingest?scrape=true` with `X-Admin-Key`
+
+## Data Pipeline
+
+```bash
+# Scrape USCIS policy + forms (requires network)
+python scripts/scrape_uscis_data.py
+
+# Ingest into ChromaDB (use --scrape to scrape first)
+python scripts/ingest_uscis_data.py --yes --scrape
+```
+
+## Backups
+
+```bash
+python scripts/backup_data.py --output ./backups
+```
+
+Restores: copy `immi_assist.db` and `chroma_db/` back to `backend/` paths.
 
 ## Health Checks
 
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /api/v1/health/live` | Process alive |
-| `GET /api/v1/health/ready` | DB + knowledge base populated |
+| `GET /api/v1/health/ready` | DB + KB ≥ `MIN_KNOWLEDGE_BASE_DOCUMENTS` + processing times |
 | `GET /api/v1/health` | Legacy summary |
 
 ## Production (Docker)

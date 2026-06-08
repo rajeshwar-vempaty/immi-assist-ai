@@ -11,6 +11,8 @@ os.environ.setdefault("OPENAI_API_KEY", "test-openai")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-anthropic")
 os.environ.setdefault("GOOGLE_API_KEY", "test-google")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ.setdefault("ALLOW_PUBLIC_REGISTRATION", "true")
+os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
 
 from app.db import base as db_base
 from app.db.base import Base, get_db
