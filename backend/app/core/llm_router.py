@@ -7,9 +7,11 @@ This is the brain of the orchestration layer. It:
 3. Manages fallbacks if a model fails
 """
 
+import asyncio
 import json
 import logging
-from typing import Optional
+import time
+from typing import Awaitable, Callable, Optional, TypeVar
 from dataclasses import dataclass
 from enum import Enum
 
@@ -18,7 +20,11 @@ from anthropic import Anthropic
 from openai import OpenAI
 
 from app.core.config import get_settings
+from app.core.exceptions import LLMServiceUnavailable
 from app.core.prompts import INTENT_CLASSIFIER_PROMPT
+from app.observability.metrics import record_llm_call
+
+T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +89,35 @@ class LLMRouter:
 
         logger.info("All LLM clients initialized successfully")
 
+    async def _execute_with_retry(
+        self,
+        operation_name: str,
+        coro_factory: Callable[[], Awaitable[T]],
+    ) -> T:
+        """Run an async operation with timeout and exponential backoff retries."""
+        last_error: Exception | None = None
+        max_attempts = self.settings.llm_max_retries + 1
+
+        for attempt in range(max_attempts):
+            try:
+                return await asyncio.wait_for(
+                    coro_factory(),
+                    timeout=self.settings.llm_timeout_seconds,
+                )
+            except asyncio.TimeoutError as exc:
+                last_error = exc
+                logger.warning(f"{operation_name} timed out (attempt {attempt + 1}/{max_attempts})")
+            except Exception as exc:
+                last_error = exc
+                logger.warning(f"{operation_name} failed (attempt {attempt + 1}/{max_attempts}): {exc}")
+
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(2**attempt)
+
+        raise LLMServiceUnavailable(
+            f"{operation_name} unavailable after {max_attempts} attempts: {last_error}"
+        )
+
     # ----- Intent Classification -----
 
     async def classify_intent(self, user_message: str) -> ClassifiedIntent:
@@ -91,19 +126,27 @@ class LLMRouter:
         Falls back to keyword-based classification if LLM fails.
         """
         try:
-            response = self.gemini_flash.generate_content(
-                f"{INTENT_CLASSIFIER_PROMPT}\n\nUser message: {user_message}"
-            )
-            result = json.loads(response.text.strip().removeprefix("```json").removesuffix("```").strip())
 
-            return ClassifiedIntent(
-                intent=Intent(result["intent"]),
-                confidence=result.get("confidence", 0.8),
-                sub_topic=result.get("sub_topic", ""),
-                visa_type=result.get("visa_type"),
-                requires_lawyer=result.get("requires_lawyer", False),
+            def _classify_sync() -> ClassifiedIntent:
+                response = self.gemini_flash.generate_content(
+                    f"{INTENT_CLASSIFIER_PROMPT}\n\nUser message: {user_message}"
+                )
+                result = json.loads(
+                    response.text.strip().removeprefix("```json").removesuffix("```").strip()
+                )
+                return ClassifiedIntent(
+                    intent=Intent(result["intent"]),
+                    confidence=result.get("confidence", 0.8),
+                    sub_topic=result.get("sub_topic", ""),
+                    visa_type=result.get("visa_type"),
+                    requires_lawyer=result.get("requires_lawyer", False),
+                )
+
+            return await self._execute_with_retry(
+                "intent_classification",
+                lambda: asyncio.to_thread(_classify_sync),
             )
-        except Exception as e:
+        except LLMServiceUnavailable as e:
             logger.warning(f"LLM classification failed, using fallback: {e}")
             return self._fallback_classify(user_message)
 
@@ -128,7 +171,8 @@ class LLMRouter:
 
     async def call_claude(self, system_prompt: str, user_message: str) -> str:
         """Call Anthropic Claude for complex reasoning tasks."""
-        try:
+
+        def _sync() -> str:
             response = self.anthropic_client.messages.create(
                 model=self.settings.reasoning_model,
                 max_tokens=2048,
@@ -136,23 +180,23 @@ class LLMRouter:
                 messages=[{"role": "user", "content": user_message}],
             )
             return response.content[0].text
-        except Exception as e:
-            logger.error(f"Claude API error: {e}")
-            raise
+
+        return await self._execute_with_retry("claude", lambda: asyncio.to_thread(_sync))
 
     async def call_gemini(self, prompt: str, structured: bool = False) -> str:
         """Call Google Gemini for structured output or fast responses."""
-        try:
+
+        def _sync() -> str:
             model = self.gemini_pro if structured else self.gemini_flash
             response = model.generate_content(prompt)
             return response.text
-        except Exception as e:
-            logger.error(f"Gemini API error: {e}")
-            raise
+
+        return await self._execute_with_retry("gemini", lambda: asyncio.to_thread(_sync))
 
     async def call_openai(self, system_prompt: str, user_message: str) -> str:
         """Call OpenAI as fallback."""
-        try:
+
+        def _sync() -> str:
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -162,9 +206,8 @@ class LLMRouter:
                 max_tokens=2048,
             )
             return response.choices[0].message.content
-        except Exception as e:
-            logger.error(f"OpenAI API error: {e}")
-            raise
+
+        return await self._execute_with_retry("openai", lambda: asyncio.to_thread(_sync))
 
     # ----- Routing Logic -----
 
@@ -214,6 +257,7 @@ class LLMRouter:
         chain = fallback_chains.get(intent, fallback_chains[Intent.GENERAL])
 
         for provider, model_name in chain:
+            start = time.perf_counter()
             try:
                 if provider == "claude":
                     content = await self.call_claude(system_prompt, user_message)
@@ -224,6 +268,12 @@ class LLMRouter:
                 else:
                     continue
 
+                record_llm_call(
+                    provider=provider,
+                    intent=intent.value,
+                    status="success",
+                    duration=time.perf_counter() - start,
+                )
                 logger.info(f"Successfully routed to {provider} ({model_name}) for {intent}")
                 return LLMResponse(
                     content=content,
@@ -233,17 +283,18 @@ class LLMRouter:
                     sources=[],
                 )
 
-            except Exception as e:
+            except LLMServiceUnavailable as e:
+                record_llm_call(
+                    provider=provider,
+                    intent=intent.value,
+                    status="error",
+                    duration=time.perf_counter() - start,
+                )
                 logger.warning(f"{provider} failed for {intent}: {e}. Trying fallback...")
                 continue
 
-        # All models failed
-        return LLMResponse(
-            content="I'm experiencing technical difficulties. Please try again in a moment, or consult the USCIS website directly at uscis.gov.",
-            model_used="fallback",
-            intent=intent,
-            confidence=0.0,
-            sources=[],
+        raise LLMServiceUnavailable(
+            f"All LLM providers failed for intent {intent.value}."
         )
 
 

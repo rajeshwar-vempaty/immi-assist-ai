@@ -1,0 +1,109 @@
+version: "3.8"
+
+networks:
+  immi_net:
+    driver: bridge
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - DEBUG=false
+      - DATABASE_URL=sqlite:////app/data/immi_assist.db
+      - CHROMA_PERSIST_DIR=/app/data/chroma_db
+      - RUN_INGEST_ON_START=true
+      - METRICS_ENABLED=true
+    volumes:
+      - chroma_data:/app/data/chroma_db
+      - sqlite_data:/app/data
+    networks:
+      - immi_net
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost/api/v1}
+    networks:
+      - immi_net
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.8-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SITE_ADDRESS=${SITE_ADDRESS:-:80}
+      - ACME_EMAIL=${ACME_EMAIL:-ops@example.com}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - immi_net
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: deploy/scheduler/Dockerfile
+    env_file:
+      - .env
+    environment:
+      - INGEST_INTERVAL_HOURS=${INGEST_INTERVAL_HOURS:-168}
+      - RUN_REFRESH_ON_START=false
+      - DATABASE_URL=sqlite:////app/data/immi_assist.db
+      - CHROMA_PERSIST_DIR=/app/data/chroma_db
+    volumes:
+      - chroma_data:/app/data/chroma_db
+      - sqlite_data:/app/data
+    networks:
+      - immi_net
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - immi_net
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  chroma_data:
+  sqlite_data:
+  caddy_data:
+  caddy_config:
+  prometheus_data:

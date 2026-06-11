@@ -44,9 +44,44 @@ class Settings(BaseSettings):
     stripe_secret_key: Optional[str] = None
     stripe_webhook_secret: Optional[str] = None
 
+    # Admin
+    admin_api_key: Optional[str] = None
+
+    # Auth hardening
+    allow_public_registration: bool = False
+    max_api_keys_per_user: int = 3
+    max_registrations_per_ip_per_day: int = 3
+
+    # Knowledge base
+    min_knowledge_base_documents: int = 10
+
+    # LLM resilience
+    llm_timeout_seconds: int = 60
+    llm_max_retries: int = 2
+
+    # Observability
+    metrics_enabled: bool = True
+    sentry_dsn: Optional[str] = None
+    sentry_traces_sample_rate: float = 0.1
+
+    # Scheduler
+    ingest_interval_hours: int = 168
+
+    # Reverse proxy / TLS
+    site_address: str = "localhost"
+    public_api_url: str = "http://localhost:8000/api/v1"
+
     @property
     def cors_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",")]
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if self.site_address and self.site_address not in (":80", "localhost"):
+            origins.extend(
+                [
+                    f"https://{self.site_address}",
+                    f"http://{self.site_address}",
+                ]
+            )
+        return list(dict.fromkeys(origins))
 
     class Config:
         env_file = ".env"

@@ -51,6 +51,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=5000)
     chat_history: list[ChatMessage] = Field(default_factory=list)
+    session_id: Optional[str] = Field(None, description="Existing chat session ID")
     language: str = Field(default="en", description="Response language code")
 
 
@@ -61,6 +62,7 @@ class ChatResponse(BaseModel):
     model_used: str
     sources: list[str]
     requires_lawyer: bool = False
+    session_id: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 

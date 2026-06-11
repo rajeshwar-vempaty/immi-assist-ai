@@ -46,8 +46,8 @@ pip install -r requirements.txt
 
 ### 3. Initialize Knowledge Base
 ```bash
-# Scrape USCIS data and build vector store
-python -m scripts.ingest_uscis_data
+# From repository root — seeds policy + processing time collections
+python scripts/ingest_uscis_data.py --yes
 ```
 
 ### 4. Run Backend
@@ -112,11 +112,15 @@ immi-assist-ai/
 └── README.md
 ```
 
-## 🔑 Features (MVP)
-- **Immigration Q&A** — RAG-powered answers with USCIS source citations
-- **Document Checklist** — Personalized checklists by visa type
-- **Timeline Estimator** — Processing time estimates with historical comparison
-- **RFE Response Helper** — Analyze RFE notices and generate response outlines
+## 🔑 Features
+- **Immigration Q&A** — `POST /api/v1/chat` with RAG and multi-LLM routing
+- **Document Checklist** — `POST /api/v1/checklist` structured JSON checklists
+- **Timeline Estimator** — `POST /api/v1/timeline` processing time estimates
+- **RFE Response Helper** — `POST /api/v1/rfe/analyze` structured RFE analysis
+- **SQLite persistence** — chat history, usage metering, API keys
+- **Rate limiting** — free tier (anonymous) and starter tier (API key)
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production deployment.
 
 ## ⚖️ Legal Disclaimer
 This tool provides informational guidance only and does not constitute legal advice. Always consult a licensed immigration attorney for your specific case.
