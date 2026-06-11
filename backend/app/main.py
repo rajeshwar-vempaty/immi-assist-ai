@@ -14,6 +14,8 @@ from app.core.exceptions import register_exception_handlers
 from app.core.validation import validate_production_settings
 from app.db.init_db import init_db
 from app.middleware.request_id import RequestIDMiddleware
+from app.observability.metrics import PrometheusMiddleware, metrics_endpoint
+from app.observability.sentry import init_sentry
 
 settings = get_settings()
 
@@ -34,6 +36,7 @@ def create_app() -> FastAPI:
     async def lifespan(app: FastAPI):
         logger.info(f"Starting {settings.app_name} in {settings.app_env} mode")
         validate_production_settings(settings)
+        init_sentry(settings)
         init_db()
 
         missing_keys = []
@@ -63,6 +66,8 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(RequestIDMiddleware)
+    if settings.metrics_enabled:
+        app.add_middleware(PrometheusMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -89,6 +94,9 @@ def create_app() -> FastAPI:
             "status": "running",
             "docs": "/docs",
         }
+
+    if settings.metrics_enabled:
+        app.add_api_route("/metrics", metrics_endpoint, methods=["GET"], include_in_schema=False)
 
     return app
 

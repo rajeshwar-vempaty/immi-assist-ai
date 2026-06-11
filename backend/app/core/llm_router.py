@@ -10,6 +10,7 @@ This is the brain of the orchestration layer. It:
 import asyncio
 import json
 import logging
+import time
 from typing import Awaitable, Callable, Optional, TypeVar
 from dataclasses import dataclass
 from enum import Enum
@@ -21,6 +22,7 @@ from openai import OpenAI
 from app.core.config import get_settings
 from app.core.exceptions import LLMServiceUnavailable
 from app.core.prompts import INTENT_CLASSIFIER_PROMPT
+from app.observability.metrics import record_llm_call
 
 T = TypeVar("T")
 
@@ -255,6 +257,7 @@ class LLMRouter:
         chain = fallback_chains.get(intent, fallback_chains[Intent.GENERAL])
 
         for provider, model_name in chain:
+            start = time.perf_counter()
             try:
                 if provider == "claude":
                     content = await self.call_claude(system_prompt, user_message)
@@ -265,6 +268,12 @@ class LLMRouter:
                 else:
                     continue
 
+                record_llm_call(
+                    provider=provider,
+                    intent=intent.value,
+                    status="success",
+                    duration=time.perf_counter() - start,
+                )
                 logger.info(f"Successfully routed to {provider} ({model_name}) for {intent}")
                 return LLMResponse(
                     content=content,
@@ -275,6 +284,12 @@ class LLMRouter:
                 )
 
             except LLMServiceUnavailable as e:
+                record_llm_call(
+                    provider=provider,
+                    intent=intent.value,
+                    status="error",
+                    duration=time.perf_counter() - start,
+                )
                 logger.warning(f"{provider} failed for {intent}: {e}. Trying fallback...")
                 continue
 

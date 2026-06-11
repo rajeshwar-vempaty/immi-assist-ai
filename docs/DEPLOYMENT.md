@@ -73,14 +73,43 @@ Restores: copy `immi_assist.db` and `chroma_db/` back to `backend/` paths.
 
 ```bash
 cp .env.example .env
-# Set production values: SECRET_KEY, ADMIN_API_KEY, API keys
+# Required: SECRET_KEY, ADMIN_API_KEY, LLM API keys
+# For public HTTPS deployment also set:
+#   SITE_ADDRESS=immiassist.yourdomain.com
+#   ACME_EMAIL=ops@yourdomain.com
+#   PUBLIC_API_URL=https://immiassist.yourdomain.com/api/v1
+#   CORS_ORIGINS=https://immiassist.yourdomain.com
 
 docker compose -f docker-compose.prod.yml up --build
 ```
 
+### Architecture
+
+| Service | Role |
+|---------|------|
+| `caddy` | Reverse proxy, TLS (ports 80/443) |
+| `backend` | FastAPI API (internal) |
+| `frontend` | Next.js UI (internal) |
+| `scheduler` | Weekly scrape + ingest refresh |
+| `prometheus` | Metrics collection (port 9090) |
+
+- App URL: `http://localhost` (local) or `https://$SITE_ADDRESS` (production)
+- API docs: `/docs` via Caddy
+- Metrics: `GET /metrics` (scraped by Prometheus)
+
+### Observability
+
+- **Prometheus**: http://localhost:9090 (targets `backend:8000/metrics`)
+- **Sentry**: set `SENTRY_DSN` in `.env` for error tracking
+- **LLM metrics**: `llm_requests_total`, `llm_request_duration_seconds`
+
+### Scheduled refresh
+
+The `scheduler` service runs `scripts/scheduled_refresh.py` every `INGEST_INTERVAL_HOURS` (default 168 = weekly).
+
 - Backend runs migrations on start
 - Set `RUN_INGEST_ON_START=true` to seed ChromaDB when empty
-- Volumes: `chroma_data`, `sqlite_data`
+- Volumes: `chroma_data`, `sqlite_data`, `caddy_data`, `prometheus_data`
 
 ## CI
 

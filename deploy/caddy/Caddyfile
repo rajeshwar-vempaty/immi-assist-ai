@@ -1,0 +1,34 @@
+# ImmiAssist AI — Caddy reverse proxy
+#
+# SITE_ADDRESS examples:
+#   :80                  → HTTP only (local)
+#   immiassist.example.com → automatic HTTPS
+
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	encode gzip zstd
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	@backend path /api/* /docs /docs/* /openapi.json /redoc /metrics
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
+
+{$SITE_ADDRESS::80} {
+	import common
+}
