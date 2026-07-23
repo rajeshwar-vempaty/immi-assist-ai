@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -22,6 +23,30 @@ from app.utils.citations import format_citations
 from app.utils.disclaimer import inject_disclaimer, check_confidence, CASE_SPECIFIC_REDIRECT
 
 logger = logging.getLogger(__name__)
+
+USCIS_FORM_RE = re.compile(r"\b((?:I|N|G|AR|EOIR|DS)[-\s]?\d{1,4}[A-Z]?)\b", re.IGNORECASE)
+
+
+def _normalize_form_number(form_number: str) -> str:
+    """Normalize USCIS-style form tokens like i129 or I 485 to I-129/I-485."""
+    compact = re.sub(r"[-\s]", "", form_number).upper()
+    match = re.fullmatch(r"([A-Z]+)(\d{1,4})([A-Z]?)", compact)
+    if not match:
+        return form_number.strip()
+    prefix, number, suffix = match.groups()
+    return f"{prefix}-{number}{suffix}"
+
+
+def _resolve_timeline_form_type(sub_topic: str | None, message: str) -> str:
+    """Prefer actual form numbers over visa labels for timeline prompts."""
+    for candidate in (sub_topic, message):
+        if not candidate:
+            continue
+        match = USCIS_FORM_RE.search(candidate)
+        if match:
+            return _normalize_form_number(match.group(1))
+
+    return (sub_topic or message).strip()
 
 
 def _format_timeline_text(data: dict) -> str:
@@ -193,7 +218,7 @@ class ChatService:
             )
         elif classified.intent == Intent.TIMELINE:
             system_prompt = TIMELINE_PROMPT.format(
-                form_type=classified.visa_type or classified.sub_topic or request.message,
+                form_type=_resolve_timeline_form_type(classified.sub_topic, request.message),
                 service_center="Unknown",
                 filing_date="Not provided",
                 category=classified.visa_type or "General",
