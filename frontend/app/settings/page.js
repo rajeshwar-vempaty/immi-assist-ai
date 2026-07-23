@@ -12,6 +12,13 @@ import {
   updateSettingsPreferences,
 } from "../../lib/api";
 
+function initialsFor(user) {
+  const raw = (user?.name || user?.email || "U").trim();
+  const parts = raw.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return raw.slice(0, 2).toUpperCase();
+}
+
 export default function SettingsPage() {
   const { user, loading, signOut } = useAuth();
   const [prefs, setPrefs] = useState(null);
@@ -47,19 +54,32 @@ export default function SettingsPage() {
     return map;
   }, [credentials]);
 
+  const configuredProviders = useMemo(
+    () => (prefs?.catalog || []).filter((c) => c.configured),
+    [prefs]
+  );
+
+  const modelsForDefault = useMemo(() => {
+    return prefs?.catalog?.find((c) => c.id === prefs?.default_provider)?.models || [];
+  }, [prefs]);
+
   if (loading || !user) {
     return (
-      <div className="content">
-        <p style={{ color: "var(--muted)" }}>Loading…</p>
+      <div className="settings-shell">
+        <main className="settings-main">
+          <p style={{ color: "var(--muted)" }}>Loading…</p>
+        </main>
       </div>
     );
   }
 
   if (!prefs) {
     return (
-      <div className="content settings-page">
-        {error && <div className="error-banner">{error}</div>}
-        <p style={{ color: "var(--muted)" }}>{busy ? "Loading settings…" : "Preparing settings…"}</p>
+      <div className="settings-shell">
+        <main className="settings-main">
+          {error && <div className="error-banner">{error}</div>}
+          <p style={{ color: "var(--muted)" }}>{busy ? "Loading settings…" : "Preparing settings…"}</p>
+        </main>
       </div>
     );
   }
@@ -129,162 +149,165 @@ export default function SettingsPage() {
     }
   };
 
+  const initials = initialsFor(user);
+
   return (
     <div className="settings-shell">
-      <header className="topbar">
+      <header className="settings-topbar">
         <Link href="/" className="btn btn-ghost">
-          ← Back to chat
+          ← Chat
         </Link>
-        <div className="user-chip">
-          {user.picture ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.picture} alt="" className="avatar-img" />
-          ) : (
-            <span className="avatar">{(user.name || user.email || "U").trim().slice(0, 2).toUpperCase()}</span>
-          )}
-          <span>{user.name || user.email}</span>
-        </div>
         <button className="btn btn-ghost" onClick={signOut}>
           Sign out
         </button>
       </header>
 
-      <main className="content">
-        <h2 className="section-title">Profile & settings</h2>
-        <p className="section-sub">
-          Manage your account defaults and encrypted provider API keys.
-        </p>
-
-        {error && <div className="error-banner">{error}</div>}
-
-        <section className="settings-card">
-          <h3>Your profile</h3>
-          <div className="profile-row">
+      <main className="settings-main">
+        <header className="settings-intro">
+          <div className="settings-intro-text">
+            <h1>Settings</h1>
+            <p>Defaults for chat, and encrypted provider keys.</p>
+          </div>
+          <div className="settings-identity">
             {user.picture ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.picture} alt="" className="avatar-img lg" />
+              <img src={user.picture} alt="" className="avatar-img" />
             ) : (
-              <span className="avatar lg">
-                {(user.name || user.email || "U").trim().slice(0, 2).toUpperCase()}
-              </span>
+              <span className="avatar">{initials}</span>
             )}
             <div>
               <strong>{user.name || "User"}</strong>
-              <div style={{ color: "var(--muted)" }}>{user.email}</div>
+              <span>{user.email}</span>
             </div>
           </div>
-        </section>
+        </header>
 
-        <section className="settings-card">
-          <h3>Default model</h3>
-          <div className="panel-stack">
-            <select
-              className="select"
-              value={prefs?.default_provider || ""}
-              onChange={(e) =>
-                onPrefs({
-                  default_provider: e.target.value || null,
-                  default_model:
-                    prefs?.catalog?.find((c) => c.id === e.target.value)?.models?.[0]?.id || null,
-                })
-              }
-            >
-              <option value="">Select provider</option>
-              {(prefs?.catalog || [])
-                .filter((c) => c.configured)
-                .map((c) => (
+        {error && (
+          <div className="error-banner">
+            <span>{error}</span>
+            <button type="button" className="banner-dismiss" onClick={() => setError(null)} aria-label="Dismiss">
+              ×
+            </button>
+          </div>
+        )}
+
+        <section className="settings-block">
+          <div className="settings-block-head">
+            <h2>Chat defaults</h2>
+            {configuredProviders.length === 0 && (
+              <span className="settings-note">Add a key below to unlock providers.</span>
+            )}
+          </div>
+
+          <div className="settings-inline-fields">
+            <label className="settings-field">
+              <span>Provider</span>
+              <select
+                className="select"
+                value={prefs?.default_provider || ""}
+                onChange={(e) =>
+                  onPrefs({
+                    default_provider: e.target.value || null,
+                    default_model:
+                      prefs?.catalog?.find((c) => c.id === e.target.value)?.models?.[0]?.id || null,
+                  })
+                }
+              >
+                <option value="">Select…</option>
+                {configuredProviders.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.label}
                   </option>
                 ))}
-            </select>
-            <select
-              className="select"
-              value={prefs?.default_model || ""}
-              onChange={(e) => onPrefs({ default_model: e.target.value || null })}
-              disabled={!prefs?.default_provider}
-            >
-              <option value="">Select model</option>
-              {(
-                prefs?.catalog?.find((c) => c.id === prefs?.default_provider)?.models || []
-              ).map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={!!prefs?.allow_fallback}
-                onChange={(e) => onPrefs({ allow_fallback: e.target.checked })}
-              />
-              Allow fallback to another configured provider on failure
+              </select>
+            </label>
+            <label className="settings-field">
+              <span>Model</span>
+              <select
+                className="select"
+                value={prefs?.default_model || ""}
+                onChange={(e) => onPrefs({ default_model: e.target.value || null })}
+                disabled={!prefs?.default_provider}
+              >
+                <option value="">Select…</option>
+                {modelsForDefault.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
+
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={!!prefs?.allow_fallback}
+              onChange={(e) => onPrefs({ allow_fallback: e.target.checked })}
+            />
+            <span>Fall back to another configured provider if the default fails</span>
+          </label>
         </section>
 
-        <section className="settings-card">
-          <h3>Provider API keys</h3>
-          <p className="disclaimer">
-            Keys are encrypted on the server. The full key is never returned to the browser after
-            saving.
-          </p>
-          <div className="provider-grid">
+        <section className="settings-block">
+          <div className="settings-block-head">
+            <h2>API keys</h2>
+            <span className="settings-note">Encrypted on the server. Full keys never leave storage.</span>
+          </div>
+
+          <div className="key-list">
             {(prefs?.catalog || []).map((provider) => {
               const saved = byProvider[provider.id];
               return (
-                <div key={provider.id} className="provider-card">
-                  <div className="provider-head">
+                <div key={provider.id} className="key-row">
+                  <div className="key-row-meta">
                     <strong>{provider.label}</strong>
                     <span className={`pill ${saved ? (saved.is_valid ? "ok" : "warn") : "muted"}`}>
                       {saved
                         ? saved.is_valid
-                          ? `Configured ${saved.masked_key}`
-                          : `Saved ${saved.masked_key} (invalid)`
-                        : "Not configured"}
+                          ? saved.masked_key
+                          : `${saved.masked_key} · invalid`
+                        : "Not set"}
                     </span>
                   </div>
-                  <input
-                    className="field"
-                    type="password"
-                    placeholder={saved ? "Enter new key to replace" : "Paste API key"}
-                    value={draftKeys[provider.id] || ""}
-                    onChange={(e) =>
-                      setDraftKeys((d) => ({ ...d, [provider.id]: e.target.value }))
-                    }
-                    autoComplete="off"
-                  />
-                  <div className="provider-actions">
-                    <button
-                      className="btn btn-primary"
-                      disabled={busy}
-                      onClick={() => onSave(provider.id)}
-                    >
-                      Save
-                    </button>
-                    <button
-                      className="btn btn-ghost"
-                      disabled={busy}
-                      onClick={() => onTest(provider.id)}
-                    >
-                      Test
-                    </button>
-                    {saved && (
+                  <div className="key-row-controls">
+                    <input
+                      className="field"
+                      type="password"
+                      placeholder={saved ? "Replace key…" : "Paste API key"}
+                      value={draftKeys[provider.id] || ""}
+                      onChange={(e) =>
+                        setDraftKeys((d) => ({ ...d, [provider.id]: e.target.value }))
+                      }
+                      autoComplete="off"
+                    />
+                    <div className="key-row-actions">
+                      <button
+                        className="btn btn-primary"
+                        disabled={busy}
+                        onClick={() => onSave(provider.id)}
+                      >
+                        Save
+                      </button>
                       <button
                         className="btn btn-ghost"
                         disabled={busy}
-                        onClick={() => onDelete(provider.id)}
+                        onClick={() => onTest(provider.id)}
                       >
-                        Remove
+                        Test
                       </button>
-                    )}
+                      {saved && (
+                        <button
+                          className="btn btn-ghost"
+                          disabled={busy}
+                          onClick={() => onDelete(provider.id)}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {status[provider.id] && (
-                    <p className="disclaimer" style={{ marginTop: 8 }}>
-                      {status[provider.id]}
-                    </p>
-                  )}
+                  {status[provider.id] ? <p className="key-row-status">{status[provider.id]}</p> : null}
                 </div>
               );
             })}
