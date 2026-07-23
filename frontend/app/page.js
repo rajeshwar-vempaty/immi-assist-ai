@@ -12,7 +12,12 @@ import {
   getStoredApiKey,
 } from "../lib/api";
 
-const TABS = ["chat", "checklist", "timeline", "rfe"];
+const TABS = [
+  { id: "chat", label: "Chat" },
+  { id: "checklist", label: "Checklist" },
+  { id: "timeline", label: "Timeline" },
+  { id: "rfe", label: "RFE" },
+];
 
 const QUICK_QUESTIONS = [
   "How do I transfer my H-1B to a new employer?",
@@ -35,140 +40,218 @@ const SERVICE_CENTERS = [
   "National Benefits Center",
 ];
 
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-    color: "#e2e8f0",
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  header: {
-    borderBottom: "1px solid #334155",
-    padding: "16px 24px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    background: "rgba(15, 23, 42, 0.9)",
-    position: "sticky",
-    top: 0,
-    zIndex: 10,
-  },
-  tab: (active) => ({
-    padding: "8px 16px",
-    borderRadius: 8,
-    border: "none",
-    cursor: "pointer",
-    background: active ? "#3b82f6" : "transparent",
-    color: active ? "#fff" : "#94a3b8",
-    fontWeight: active ? 600 : 400,
-  }),
-  card: {
-    background: "rgba(51, 65, 85, 0.5)",
-    border: "1px solid #475569",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  input: {
-    width: "100%",
-    padding: "12px 14px",
-    borderRadius: 10,
-    border: "1px solid #475569",
-    background: "rgba(30, 41, 59, 0.8)",
-    color: "#e2e8f0",
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  button: {
-    padding: "12px 20px",
-    borderRadius: 10,
-    border: "none",
-    background: "linear-gradient(135deg, #3b82f6, #2563eb)",
-    color: "#fff",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-};
+const HISTORY_KEY = "immi_chat_history_v1";
+const USER_KEY = "immi_user_profile_v1";
+
+function loadHistory() {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(items) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 40)));
+}
+
+function loadUser() {
+  if (typeof window === "undefined") return null;
+  try {
+    return JSON.parse(localStorage.getItem(USER_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function saveUser(user) {
+  if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+  else localStorage.removeItem(USER_KEY);
+}
+
+function titleFromMessages(messages) {
+  const first = messages.find((m) => m.role === "user");
+  if (!first) return "New conversation";
+  return first.content.slice(0, 48) + (first.content.length > 48 ? "…" : "");
+}
+
+function formatTime(iso) {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
 
 export default function Home() {
   const [tab, setTab] = useState("chat");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [history, setHistory] = useState([]);
+  const [activeChatId, setActiveChatId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
 
-  // Checklist state
   const [visaType, setVisaType] = useState("H1B");
   const [checklistDetails, setChecklistDetails] = useState("");
   const [checklistResult, setChecklistResult] = useState(null);
 
-  // Timeline state
   const [formType, setFormType] = useState("I-129");
   const [serviceCenter, setServiceCenter] = useState(SERVICE_CENTERS[0]);
   const [filingDate, setFilingDate] = useState("");
   const [timelineResult, setTimelineResult] = useState(null);
 
-  // RFE state
   const [rfeText, setRfeText] = useState("");
   const [rfeResult, setRfeResult] = useState(null);
 
   useEffect(() => {
     setApiKeyInput(getStoredApiKey());
+    setUser(loadUser());
+    const items = loadHistory();
+    setHistory(items);
+    if (items[0]) {
+      setActiveChatId(items[0].id);
+      setMessages(items[0].messages || []);
+    }
   }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, tab]);
+
+  const persistConversation = (nextMessages, chatId = activeChatId) => {
+    const now = new Date().toISOString();
+    let items = loadHistory();
+    if (!chatId) {
+      const id = crypto.randomUUID();
+      const entry = {
+        id,
+        title: titleFromMessages(nextMessages),
+        messages: nextMessages,
+        updatedAt: now,
+      };
+      items = [entry, ...items];
+      setActiveChatId(id);
+      setHistory(items);
+      saveHistory(items);
+      return id;
+    }
+    items = items.map((item) =>
+      item.id === chatId
+        ? {
+            ...item,
+            title: titleFromMessages(nextMessages),
+            messages: nextMessages,
+            updatedAt: now,
+          }
+        : item
+    );
+    setHistory(items);
+    saveHistory(items);
+    return chatId;
+  };
+
+  const startNewChat = () => {
+    setActiveChatId(null);
+    setMessages([]);
+    setError(null);
+    setTab("chat");
+    setHistoryOpen(false);
+  };
+
+  const openChat = (id) => {
+    const item = history.find((h) => h.id === id);
+    if (!item) return;
+    setActiveChatId(id);
+    setMessages(item.messages || []);
+    setTab("chat");
+    setHistoryOpen(false);
+  };
 
   const handleSaveApiKey = () => {
     setApiKey(apiKeyInput);
     setError(null);
   };
 
-  const handleRegister = async () => {
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError(null);
+    const name = displayName.trim() || email.split("@")[0] || "Guest";
     try {
-      const result = await registerUser(null, "free");
-      setApiKeyInput(result.api_key);
-      setApiKey(result.api_key);
-      setError(null);
-      alert(`API key created (tier: ${result.tier}). Daily limit: ${result.daily_limit}`);
-    } catch (e) {
-      setError(
-        e.message ||
-          "Registration requires admin authorization in production. Contact your administrator."
-      );
+      // Optional: mint an API key when registering with backend
+      let apiKey = getStoredApiKey();
+      if (!apiKey && email.trim()) {
+        try {
+          const result = await registerUser(email.trim(), "free");
+          apiKey = result.api_key;
+          setApiKey(apiKey);
+          setApiKeyInput(apiKey);
+        } catch {
+          // Public registration may be disabled — still allow local profile UI
+        }
+      }
+      const profile = {
+        name,
+        email: email.trim() || null,
+        signedInAt: new Date().toISOString(),
+      };
+      saveUser(profile);
+      setUser(profile);
+      setLoginOpen(false);
+    } catch (err) {
+      setError(err.message || "Could not sign in");
     }
+  };
+
+  const handleSignOut = () => {
+    saveUser(null);
+    setUser(null);
   };
 
   const handleSend = async (messageText = null) => {
     const text = messageText || input.trim();
     if (!text || isLoading) return;
     setError(null);
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    const userMessage = { role: "user", content: text };
+    const next = [...messages, userMessage];
+    setMessages(next);
     setInput("");
     setIsLoading(true);
+    const chatId = persistConversation(next);
+
     try {
       const sessionId =
         typeof window !== "undefined"
           ? localStorage.getItem("immi_chat_session_id")
           : null;
       const response = await sendChatMessage(text, messages, sessionId);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: response.response,
-          meta: {
-            intent: response.intent,
-            model: response.model_used,
-            sources: response.sources,
-          },
+      const assistantMessage = {
+        role: "assistant",
+        content: response.response,
+        meta: {
+          intent: response.intent,
+          model: response.model_used,
+          sources: response.sources,
         },
-      ]);
-    } catch (e) {
-      setError(e.message);
+      };
+      const withAssistant = [...next, assistantMessage];
+      setMessages(withAssistant);
+      persistConversation(withAssistant, chatId);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -178,13 +261,11 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await createChecklist({
-        visa_type: visaType,
-        details: checklistDetails,
-      });
-      setChecklistResult(result);
-    } catch (e) {
-      setError(e.message);
+      setChecklistResult(
+        await createChecklist({ visa_type: visaType, details: checklistDetails })
+      );
+    } catch (err) {
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -194,14 +275,15 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await estimateTimeline({
-        form_type: formType,
-        service_center: serviceCenter,
-        filing_date: filingDate || null,
-      });
-      setTimelineResult(result);
-    } catch (e) {
-      setError(e.message);
+      setTimelineResult(
+        await estimateTimeline({
+          form_type: formType,
+          service_center: serviceCenter,
+          filing_date: filingDate || null,
+        })
+      );
+    } catch (err) {
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -212,248 +294,396 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await analyzeRFE({ rfe_text: rfeText });
-      setRfeResult(result);
-    } catch (e) {
-      setError(e.message);
+      setRfeResult(await analyzeRFE({ rfe_text: rfeText }));
+    } catch (err) {
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const initials = (user?.name || "G")
+    .split(" ")
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 28 }}>🇺🇸</span>
+    <div className="app-shell">
+      <aside className={`history-panel ${historyOpen ? "open-mobile" : ""}`}>
+        <div className="brand-mark">
+          <div className="mark">IA</div>
           <div>
-            <h1 style={{ margin: 0, fontSize: 20 }}>ImmiAssist AI</h1>
-            <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>
-              Production immigration assistant
-            </p>
+            <h1>ImmiAssist</h1>
+            <p>Immigration guidance</p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input
-            type="password"
-            placeholder="API Key (optional)"
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
-            style={{ ...styles.input, width: 180, marginBottom: 0 }}
-          />
-          <button style={{ ...styles.button, padding: "8px 12px" }} onClick={handleSaveApiKey}>
-            Save
+
+        <div className="history-actions">
+          <button className="btn btn-primary" style={{ flex: 1 }} onClick={startNewChat}>
+            New chat
           </button>
           <button
-            style={{ ...styles.button, padding: "8px 12px", background: "#475569" }}
-            onClick={handleRegister}
+            className="btn btn-ghost mobile-bar"
+            onClick={() => setHistoryOpen(false)}
           >
-            Get Key
+            Close
           </button>
         </div>
-      </header>
 
-      <nav style={{ display: "flex", gap: 8, padding: "12px 24px", borderBottom: "1px solid #334155" }}>
-        {TABS.map((t) => (
-          <button key={t} style={styles.tab(tab === t)} onClick={() => setTab(t)}>
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </nav>
+        <div className="history-list">
+          {history.length === 0 && (
+            <p style={{ color: "var(--muted)", fontSize: "0.85rem", padding: "0 4px" }}>
+              Your conversations will appear here.
+            </p>
+          )}
+          {history.map((item) => (
+            <button
+              key={item.id}
+              className={`history-item ${item.id === activeChatId ? "active" : ""}`}
+              onClick={() => openChat(item.id)}
+            >
+              <div className="title">{item.title}</div>
+              <div className="meta">{formatTime(item.updatedAt)}</div>
+            </button>
+          ))}
+        </div>
+      </aside>
 
-      <main style={{ maxWidth: 800, margin: "0 auto", padding: "24px 16px 80px" }}>
-        {error && (
-          <div style={{ ...styles.card, borderColor: "#ef4444", color: "#fca5a5" }}>
-            {error}
+      <div className="main-panel">
+        <header className="topbar">
+          <div className="mobile-bar">
+            <button className="btn btn-ghost" onClick={() => setHistoryOpen(true)}>
+              History
+            </button>
           </div>
-        )}
 
-        {tab === "chat" && (
-          <>
-            {messages.length === 0 ? (
-              <div style={{ textAlign: "center", paddingTop: 40 }}>
-                <h2>Immigration Q&A</h2>
-                <p style={{ color: "#94a3b8" }}>Ask about visas, documents, timelines, and more.</p>
-                <div style={{ display: "grid", gap: 10, marginTop: 24 }}>
-                  {QUICK_QUESTIONS.map((q, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleSend(q)}
-                      style={{ ...styles.card, cursor: "pointer", textAlign: "left" }}
-                    >
-                      {q}
-                    </button>
-                  ))}
+          <nav className="nav-tabs" aria-label="Primary">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                className={`nav-tab ${tab === t.id ? "active" : ""}`}
+                onClick={() => setTab(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="topbar-right">
+            {user ? (
+              <>
+                <div className="user-chip">
+                  <span className="avatar">{initials}</span>
+                  <span>{user.name}</span>
                 </div>
-              </div>
+                <button className="btn btn-ghost" onClick={handleSignOut}>
+                  Sign out
+                </button>
+              </>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
-                      maxWidth: "90%",
-                      ...styles.card,
-                      background:
-                        msg.role === "user"
-                          ? "linear-gradient(135deg, #3b82f6, #2563eb)"
-                          : styles.card.background,
-                    }}
-                  >
-                    {msg.role === "assistant" ? (
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                    ) : (
-                      msg.content
-                    )}
-                    {msg.meta?.sources?.length > 0 && (
-                      <div style={{ marginTop: 8, fontSize: 11, color: "#93c5fd" }}>
-                        {msg.meta.sources.slice(0, 3).map((s, j) => (
-                          <div key={j}>📄 {s}</div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
+              <button className="btn btn-ink" onClick={() => setLoginOpen(true)}>
+                Sign in
+              </button>
             )}
-            <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: 16, background: "rgba(15,23,42,0.95)" }}>
-              <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", gap: 8 }}>
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                  placeholder="Ask an immigration question..."
-                  style={{ ...styles.input, marginBottom: 0, flex: 1 }}
-                />
-                <button style={styles.button} onClick={() => handleSend()} disabled={isLoading}>
-                  Send
+          </div>
+        </header>
+
+        <main className={`content ${tab === "chat" ? "" : ""}`}>
+          {error && <div className="error-banner">{error}</div>}
+
+          {tab === "chat" && (
+            <>
+              {messages.length === 0 ? (
+                <section className="hero-block">
+                  <h2>Ask clearly. Decide calmly.</h2>
+                  <p>
+                    Get grounded answers on visas, documents, timelines, and RFEs —
+                    with sources you can check.
+                  </p>
+                  <div className="quick-grid">
+                    {QUICK_QUESTIONS.map((q) => (
+                      <button key={q} className="quick-btn" onClick={() => handleSend(q)}>
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="disclaimer">
+                    Informational guidance only — not legal advice. For your specific
+                    case, consult a licensed immigration attorney.
+                  </p>
+                </section>
+              ) : (
+                <div className="messages">
+                  {messages.map((msg, i) => (
+                    <div key={i} className={`bubble ${msg.role}`}>
+                      {msg.role === "assistant" ? (
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      ) : (
+                        msg.content
+                      )}
+                      {msg.meta?.sources?.length > 0 && (
+                        <div className="sources">
+                          {msg.meta.sources.slice(0, 4).map((s, j) => (
+                            <span key={j} className="source-chip">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {isLoading && (
+                    <div className="bubble assistant" style={{ color: "var(--muted)" }}>
+                      Researching…
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === "checklist" && (
+            <section className="panel-stack">
+              <h2 className="section-title">Document checklist</h2>
+              <p className="section-sub">
+                Build a filing-ready list for your petition type and situation.
+              </p>
+              <select
+                className="select"
+                value={visaType}
+                onChange={(e) => setVisaType(e.target.value)}
+              >
+                {VISA_TYPES.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+              <textarea
+                className="field"
+                rows={4}
+                value={checklistDetails}
+                onChange={(e) => setChecklistDetails(e.target.value)}
+                placeholder="Describe your situation…"
+              />
+              <div>
+                <button className="btn btn-primary" onClick={handleChecklist} disabled={isLoading}>
+                  Generate checklist
                 </button>
               </div>
-            </div>
-          </>
-        )}
-
-        {tab === "checklist" && (
-          <div>
-            <h2>Document Checklist</h2>
-            <select value={visaType} onChange={(e) => setVisaType(e.target.value)} style={styles.input}>
-              {VISA_TYPES.map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-            <textarea
-              value={checklistDetails}
-              onChange={(e) => setChecklistDetails(e.target.value)}
-              placeholder="Describe your situation..."
-              rows={4}
-              style={styles.input}
-            />
-            <button style={styles.button} onClick={handleChecklist} disabled={isLoading}>
-              Generate Checklist
-            </button>
-            {checklistResult && (
-              <div style={{ marginTop: 24 }}>
-                <h3>{checklistResult.visa_type} — {checklistResult.form_number}</h3>
-                <p>Fee: {checklistResult.filing_fee} | Prep time: {checklistResult.estimated_prep_time}</p>
-                {checklistResult.checklist.map((cat, i) => (
-                  <div key={i} style={styles.card}>
-                    <strong>{cat.category}</strong>
-                    <ul>
-                      {cat.items.map((item, j) => (
-                        <li key={j}>
-                          {item.required ? "✅" : "○"} {item.document} — {item.description}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-                <p style={{ fontSize: 12, color: "#94a3b8" }}>{checklistResult.disclaimer}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab === "timeline" && (
-          <div>
-            <h2>Processing Timeline</h2>
-            <input
-              value={formType}
-              onChange={(e) => setFormType(e.target.value)}
-              placeholder="Form type (e.g. I-129)"
-              style={styles.input}
-            />
-            <select
-              value={serviceCenter}
-              onChange={(e) => setServiceCenter(e.target.value)}
-              style={styles.input}
-            >
-              {SERVICE_CENTERS.map((sc) => (
-                <option key={sc} value={sc}>{sc}</option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={filingDate}
-              onChange={(e) => setFilingDate(e.target.value)}
-              style={styles.input}
-            />
-            <button style={styles.button} onClick={handleTimeline} disabled={isLoading}>
-              Estimate Timeline
-            </button>
-            {timelineResult && (
-              <div style={{ marginTop: 24, ...styles.card }}>
-                <h3>{timelineResult.form_type}</h3>
-                <p>Status: <strong>{timelineResult.case_status}</strong></p>
-                <p>{timelineResult.status_explanation}</p>
-                <p>
-                  Range: {timelineResult.processing_range_months?.min}–
-                  {timelineResult.processing_range_months?.max} months
-                </p>
-                <p style={{ fontSize: 12 }}>{timelineResult.disclaimer}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab === "rfe" && (
-          <div>
-            <h2>RFE Analysis</h2>
-            <textarea
-              value={rfeText}
-              onChange={(e) => setRfeText(e.target.value)}
-              placeholder="Paste your RFE notice text here..."
-              rows={10}
-              style={styles.input}
-            />
-            <button style={styles.button} onClick={handleRFE} disabled={isLoading || rfeText.length < 10}>
-              Analyze RFE
-            </button>
-            {rfeResult && (
-              <div style={{ marginTop: 24 }}>
-                <div style={styles.card}>
-                  <h3>Summary</h3>
-                  <ReactMarkdown>{rfeResult.summary}</ReactMarkdown>
-                  <p><strong>Risk:</strong> {rfeResult.risk_level}</p>
-                  <p><strong>Deadline:</strong> {rfeResult.deadline_info}</p>
+              {checklistResult && (
+                <div className="result-block">
+                  <h3 style={{ marginTop: 0 }}>
+                    {checklistResult.visa_type} — {checklistResult.form_number}
+                  </h3>
+                  <p style={{ color: "var(--muted)" }}>
+                    Fee: {checklistResult.filing_fee} · Prep time:{" "}
+                    {checklistResult.estimated_prep_time}
+                  </p>
+                  {checklistResult.checklist.map((cat, i) => (
+                    <div key={i} className="category">
+                      <h4>{cat.category}</h4>
+                      <ul>
+                        {cat.items.map((item, j) => (
+                          <li key={j}>
+                            <strong>{item.document}</strong>
+                            {item.required ? " (required)" : " (optional)"} —{" "}
+                            {item.description}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  <p className="disclaimer">{checklistResult.disclaimer}</p>
                 </div>
-                {rfeResult.points?.map((p, i) => (
-                  <div key={i} style={styles.card}>
-                    <strong>{p.issue}</strong>
-                    <ul>
-                      {p.evidence_suggestions?.map((s, j) => (
-                        <li key={j}>{s}</li>
-                      ))}
-                    </ul>
-                  </div>
+              )}
+            </section>
+          )}
+
+          {tab === "timeline" && (
+            <section className="panel-stack">
+              <h2 className="section-title">Processing timeline</h2>
+              <p className="section-sub">
+                Estimate wait ranges from current USCIS processing-time guidance.
+              </p>
+              <input
+                className="field"
+                value={formType}
+                onChange={(e) => setFormType(e.target.value)}
+                placeholder="Form type (e.g. I-129)"
+              />
+              <select
+                className="select"
+                value={serviceCenter}
+                onChange={(e) => setServiceCenter(e.target.value)}
+              >
+                {SERVICE_CENTERS.map((sc) => (
+                  <option key={sc} value={sc}>
+                    {sc}
+                  </option>
                 ))}
-                <p style={{ fontSize: 12, color: "#94a3b8" }}>{rfeResult.disclaimer}</p>
+              </select>
+              <input
+                className="field"
+                type="date"
+                value={filingDate}
+                onChange={(e) => setFilingDate(e.target.value)}
+              />
+              <div>
+                <button className="btn btn-primary" onClick={handleTimeline} disabled={isLoading}>
+                  Estimate timeline
+                </button>
               </div>
-            )}
+              {timelineResult && (
+                <div className="result-block">
+                  <h3 style={{ marginTop: 0 }}>{timelineResult.form_type}</h3>
+                  <p>
+                    Status: <strong>{timelineResult.case_status}</strong>
+                  </p>
+                  <p>{timelineResult.status_explanation}</p>
+                  <p>
+                    Range: {timelineResult.processing_range_months?.min}–
+                    {timelineResult.processing_range_months?.max} months
+                  </p>
+                  <p className="disclaimer">{timelineResult.disclaimer}</p>
+                </div>
+              )}
+            </section>
+          )}
+
+          {tab === "rfe" && (
+            <section className="panel-stack">
+              <h2 className="section-title">RFE analysis</h2>
+              <p className="section-sub">
+                Paste the notice text to break down issues, evidence, and next steps.
+              </p>
+              <textarea
+                className="field"
+                rows={10}
+                value={rfeText}
+                onChange={(e) => setRfeText(e.target.value)}
+                placeholder="Paste your RFE notice text here…"
+              />
+              <div>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleRFE}
+                  disabled={isLoading || rfeText.length < 10}
+                >
+                  Analyze RFE
+                </button>
+              </div>
+              {rfeResult && (
+                <div className="result-block">
+                  <h3 style={{ marginTop: 0 }}>Summary</h3>
+                  <ReactMarkdown>{rfeResult.summary}</ReactMarkdown>
+                  <p>
+                    <strong>Risk:</strong> {rfeResult.risk_level}
+                  </p>
+                  <p>
+                    <strong>Deadline:</strong> {rfeResult.deadline_info}
+                  </p>
+                  {rfeResult.points?.map((p, i) => (
+                    <div key={i} className="category">
+                      <h4>{p.issue}</h4>
+                      <ul>
+                        {p.evidence_suggestions?.map((s, j) => (
+                          <li key={j}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  <p className="disclaimer">{rfeResult.disclaimer}</p>
+                </div>
+              )}
+            </section>
+          )}
+        </main>
+
+        {tab === "chat" && (
+          <div className="composer">
+            <div className="composer-inner">
+              <textarea
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Ask about visas, documents, timelines…"
+              />
+              <button
+                className="btn btn-primary"
+                onClick={() => handleSend()}
+                disabled={!input.trim() || isLoading}
+              >
+                Send
+              </button>
+            </div>
           </div>
         )}
-      </main>
+      </div>
+
+      {loginOpen && (
+        <div className="modal-backdrop" onClick={() => setLoginOpen(false)}>
+          <form
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleLogin}
+          >
+            <h3>Welcome back</h3>
+            <p>
+              Sign in to keep your profile handy. Chat history is saved on this device
+              for now — account sync comes next.
+            </p>
+            <input
+              className="field"
+              style={{ marginBottom: 10 }}
+              placeholder="Display name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+            <input
+              className="field"
+              type="email"
+              placeholder="Email (optional)"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ cursor: "pointer", color: "var(--muted)", fontSize: "0.85rem" }}>
+                Advanced: API key
+              </summary>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <input
+                  className="field"
+                  type="password"
+                  placeholder="API key"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                />
+                <button type="button" className="btn btn-ghost" onClick={handleSaveApiKey}>
+                  Save
+                </button>
+              </div>
+            </details>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setLoginOpen(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Continue
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
