@@ -784,12 +784,37 @@ a {
 .login-visual {
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(800px 500px at 70% 20%, rgba(31, 111, 106, 0.22), transparent 60%),
-    linear-gradient(160deg, #d9ebe8 0%, #efe7d6 45%, #d7e4ee 100%);
   display: grid;
   place-items: center;
   padding: 48px;
+  background:
+    radial-gradient(800px 500px at 70% 20%, rgba(31, 111, 106, 0.22), transparent 60%),
+    linear-gradient(160deg, #d9ebe8 0%, #efe7d6 45%, #d7e4ee 100%);
+  transition: background 280ms ease;
+}
+
+.login-visual-timeline {
+  background:
+    radial-gradient(700px 420px at 30% 80%, rgba(31, 111, 106, 0.18), transparent 55%),
+    linear-gradient(185deg, #e8f1ef 0%, #f3ebe0 48%, #dce7f0 100%);
+}
+
+.login-visual-dossier {
+  background:
+    radial-gradient(620px 460px at 80% 30%, rgba(184, 140, 74, 0.16), transparent 55%),
+    linear-gradient(145deg, #efe8db 0%, #e2ebe8 52%, #d5e3ec 100%);
+}
+
+.login-visual-route {
+  background:
+    radial-gradient(760px 480px at 20% 25%, rgba(47, 92, 120, 0.18), transparent 58%),
+    linear-gradient(170deg, #d7e6ef 0%, #e8eee6 46%, #efe6d4 100%);
+}
+
+.login-visual-horizon {
+  background:
+    radial-gradient(900px 380px at 50% 100%, rgba(31, 111, 106, 0.28), transparent 50%),
+    linear-gradient(180deg, #cfdfe8 0%, #e8ebe3 42%, #f0e6d4 100%);
 }
 
 .login-visual-scene {
@@ -814,15 +839,22 @@ a {
   animation: drift 9s ease-in-out infinite reverse;
 }
 
+.passport-card,
+.timeline-panel,
+.dossier-sheet.sheet-front,
+.route-card,
+.horizon-card {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(11, 28, 40, 0.1);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+}
+
 .passport-card {
   position: absolute;
   inset: 22% 18%;
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(11, 28, 40, 0.1);
   border-radius: 22px;
   padding: 28px;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(6px);
   animation: floaty 6s ease-in-out infinite;
 }
 
@@ -839,7 +871,11 @@ a {
   margin-bottom: 14px;
 }
 
-.passport-card p {
+.passport-card p,
+.timeline-panel p,
+.dossier-sheet p,
+.route-card p,
+.horizon-card p {
   margin: 0;
   color: var(--sea-deep);
   font-size: 0.85rem;
@@ -848,7 +884,11 @@ a {
   text-transform: uppercase;
 }
 
-.passport-card h3 {
+.passport-card h3,
+.timeline-panel h3,
+.dossier-sheet h3,
+.route-card h3,
+.horizon-card h3 {
   margin: 8px 0 14px;
   font-family: var(--font-display);
   font-size: 1.7rem;
@@ -856,7 +896,10 @@ a {
   color: var(--ink);
 }
 
-.passport-card ul {
+.passport-card ul,
+.dossier-sheet ul,
+.route-card ul,
+.horizon-card ul {
   margin: 0;
   padding-left: 18px;
   color: var(--muted);
@@ -891,6 +934,232 @@ a {
   bottom: 14%;
   right: 16%;
   animation: floaty 6.5s ease-in-out infinite 0.8s;
+}
+
+/* Timeline layout */
+.visual-timeline .timeline-rail {
+  position: absolute;
+  left: 18%;
+  top: 12%;
+  bottom: 14%;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(31, 111, 106, 0.45), transparent);
+}
+
+.timeline-panel {
+  position: absolute;
+  inset: 16% 12% 16% 28%;
+  border-radius: 22px;
+  padding: 28px;
+  animation: floaty 7s ease-in-out infinite;
+}
+
+.timeline-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.timeline-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.step-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: rgba(31, 111, 106, 0.12);
+  color: var(--sea-deep);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.chip-t1 {
+  top: 10%;
+  left: 6%;
+  animation: floaty 5.5s ease-in-out infinite;
+}
+
+.chip-t2 {
+  top: 42%;
+  left: 4%;
+  animation: floaty 6.5s ease-in-out infinite 0.3s;
+}
+
+.chip-t3 {
+  bottom: 12%;
+  left: 8%;
+  animation: floaty 7s ease-in-out infinite 0.6s;
+}
+
+/* Dossier / stacked docs */
+.dossier-stack {
+  position: absolute;
+  inset: 16% 14%;
+}
+
+.dossier-sheet {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+}
+
+.dossier-sheet.sheet-back {
+  transform: rotate(-6deg) translate(-10px, 12px);
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(11, 28, 40, 0.08);
+}
+
+.dossier-sheet.sheet-mid {
+  transform: rotate(4deg) translate(12px, 6px);
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(11, 28, 40, 0.09);
+}
+
+.dossier-sheet.sheet-front {
+  padding: 28px;
+  animation: floaty 6.5s ease-in-out infinite;
+}
+
+.chip-d1 {
+  top: 8%;
+  right: 4%;
+  animation: floaty 5s ease-in-out infinite;
+}
+
+.chip-d2 {
+  bottom: 20%;
+  left: 2%;
+  animation: floaty 6s ease-in-out infinite 0.35s;
+}
+
+.chip-d3 {
+  bottom: 8%;
+  right: 10%;
+  animation: floaty 7s ease-in-out infinite 0.7s;
+}
+
+/* Route / pathway map */
+.route-path {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.route-line {
+  fill: none;
+  stroke: rgba(11, 28, 40, 0.18);
+  stroke-width: 2;
+  stroke-dasharray: 6 8;
+  animation: route-dash 14s linear infinite;
+}
+
+.route-node {
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 2;
+}
+
+.route-node-start {
+  fill: var(--sea-deep);
+}
+
+.route-node-mid {
+  fill: var(--sea);
+}
+
+.route-node-end {
+  fill: var(--ink);
+}
+
+.route-card {
+  position: absolute;
+  left: 10%;
+  right: 22%;
+  bottom: 10%;
+  border-radius: 22px;
+  padding: 24px 26px;
+  animation: floaty 6s ease-in-out infinite;
+}
+
+.chip-r1 {
+  top: 12%;
+  right: 10%;
+  animation: floaty 5.5s ease-in-out infinite;
+}
+
+.chip-r2 {
+  top: 38%;
+  left: 8%;
+  animation: floaty 6.5s ease-in-out infinite 0.4s;
+}
+
+.chip-r3 {
+  top: 18%;
+  left: 28%;
+  animation: floaty 7s ease-in-out infinite 0.8s;
+}
+
+/* Horizon */
+.horizon-glow {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 18%;
+  height: 42%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.55), transparent 68%);
+  animation: drift 10s ease-in-out infinite;
+}
+
+.horizon-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 28%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(11, 28, 40, 0.22), transparent);
+}
+
+.horizon-card {
+  position: absolute;
+  inset: 18% 16% 32%;
+  border-radius: 22px;
+  padding: 28px;
+  animation: floaty 7s ease-in-out infinite;
+}
+
+.chip-h1 {
+  bottom: 14%;
+  left: 12%;
+  animation: floaty 5s ease-in-out infinite;
+}
+
+.chip-h2 {
+  bottom: 10%;
+  right: 18%;
+  animation: floaty 6s ease-in-out infinite 0.45s;
+}
+
+.chip-h3 {
+  bottom: 18%;
+  left: 42%;
+  animation: floaty 7s ease-in-out infinite 0.9s;
+}
+
+@keyframes route-dash {
+  to {
+    stroke-dashoffset: -140;
+  }
 }
 
 @keyframes floaty {

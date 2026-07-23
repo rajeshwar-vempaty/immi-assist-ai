@@ -81,26 +81,235 @@ function PasswordField({ value, onChange, placeholder, autoComplete }) {
   );
 }
 
-function JourneyVisual() {
+const JOURNEY_VISUALS = [
+  {
+    id: "orbit",
+    status: "Status: Preparing",
+    title: "Your next step, clarified.",
+    items: ["Visa pathways", "Document checklists", "Timeline estimates"],
+    chips: ["I-485", "H-1B", "RFE"],
+  },
+  {
+    id: "timeline",
+    status: "Case progress",
+    title: "From question to filing plan.",
+    items: ["Understand your path", "Gather the right docs", "Track each milestone"],
+    chips: ["N-400", "I-130", "EAD"],
+  },
+  {
+    id: "dossier",
+    status: "Document room",
+    title: "Know what to file — and why.",
+    items: ["Evidence checklist", "Form readiness", "RFE risk notes"],
+    chips: ["I-765", "DS-160", "I-94"],
+  },
+  {
+    id: "route",
+    status: "Pathway map",
+    title: "See the route before you move.",
+    items: ["Eligibility signals", "Wait-time ranges", "Next action only"],
+    chips: ["EB-2", "L-1A", "OPT"],
+  },
+  {
+    id: "horizon",
+    status: "Calm guidance",
+    title: "Less guesswork. More clarity.",
+    items: ["Plain-language answers", "Deadline awareness", "Grounded next steps"],
+    chips: ["F-1", "H-4", "CR-1"],
+  },
+];
+
+function JourneyVisualOrbit({ visual }) {
   return (
-    <aside className="login-visual" aria-hidden="true">
-      <div className="login-visual-scene">
-        <div className="orbit orbit-a" />
-        <div className="orbit orbit-b" />
-        <div className="passport-card">
+    <div className="login-visual-scene visual-orbit">
+      <div className="orbit orbit-a" />
+      <div className="orbit orbit-b" />
+      <div className="passport-card">
+        <div className="passport-stamp">IA</div>
+        <p>{visual.status}</p>
+        <h3>{visual.title}</h3>
+        <ul>
+          {visual.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+      {visual.chips.map((chip, i) => (
+        <div key={chip} className={`float-chip chip-${String.fromCharCode(97 + i)}`}>
+          {chip}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function JourneyVisualTimeline({ visual }) {
+  return (
+    <div className="login-visual-scene visual-timeline">
+      <div className="timeline-rail" />
+      <div className="timeline-panel">
+        <div className="passport-stamp">IA</div>
+        <p>{visual.status}</p>
+        <h3>{visual.title}</h3>
+        <ol className="timeline-steps">
+          {visual.items.map((item, i) => (
+            <li key={item}>
+              <span className="step-dot">{i + 1}</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+      {visual.chips.map((chip, i) => (
+        <div key={chip} className={`float-chip chip-t${i + 1}`}>
+          {chip}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function JourneyVisualDossier({ visual }) {
+  return (
+    <div className="login-visual-scene visual-dossier">
+      <div className="dossier-stack">
+        <div className="dossier-sheet sheet-back" />
+        <div className="dossier-sheet sheet-mid" />
+        <div className="dossier-sheet sheet-front">
           <div className="passport-stamp">IA</div>
-          <p>Status: Preparing</p>
-          <h3>Your next step, clarified.</h3>
+          <p>{visual.status}</p>
+          <h3>{visual.title}</h3>
           <ul>
-            <li>Visa pathways</li>
-            <li>Document checklists</li>
-            <li>Timeline estimates</li>
+            {visual.items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
           </ul>
         </div>
-        <div className="float-chip chip-a">I-485</div>
-        <div className="float-chip chip-b">H-1B</div>
-        <div className="float-chip chip-c">RFE</div>
       </div>
+      {visual.chips.map((chip, i) => (
+        <div key={chip} className={`float-chip chip-d${i + 1}`}>
+          {chip}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function JourneyVisualRoute({ visual }) {
+  return (
+    <div className="login-visual-scene visual-route">
+      <svg className="route-path" viewBox="0 0 400 420" fill="none" aria-hidden="true">
+        <path
+          className="route-line"
+          d="M48 340 C 90 250, 120 220, 170 200 S 280 150, 320 80"
+        />
+        <circle className="route-node route-node-start" cx="48" cy="340" r="7" />
+        <circle className="route-node route-node-mid" cx="170" cy="200" r="7" />
+        <circle className="route-node route-node-end" cx="320" cy="80" r="7" />
+      </svg>
+      <div className="route-card">
+        <div className="passport-stamp">IA</div>
+        <p>{visual.status}</p>
+        <h3>{visual.title}</h3>
+        <ul>
+          {visual.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+      {visual.chips.map((chip, i) => (
+        <div key={chip} className={`float-chip chip-r${i + 1}`}>
+          {chip}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function JourneyVisualHorizon({ visual }) {
+  return (
+    <div className="login-visual-scene visual-horizon">
+      <div className="horizon-glow" />
+      <div className="horizon-line" />
+      <div className="horizon-card">
+        <div className="passport-stamp">IA</div>
+        <p>{visual.status}</p>
+        <h3>{visual.title}</h3>
+        <ul>
+          {visual.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+      {visual.chips.map((chip, i) => (
+        <div key={chip} className={`float-chip chip-h${i + 1}`}>
+          {chip}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const JOURNEY_RENDERERS = {
+  orbit: JourneyVisualOrbit,
+  timeline: JourneyVisualTimeline,
+  dossier: JourneyVisualDossier,
+  route: JourneyVisualRoute,
+  horizon: JourneyVisualHorizon,
+};
+
+function JourneyVisual() {
+  const [visual, setVisual] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const forced = params.get("visual");
+    if (forced) {
+      const match = JOURNEY_VISUALS.find((v) => v.id === forced);
+      if (match) {
+        setVisual(match);
+        return;
+      }
+    }
+
+    const lastKey = "immi_login_visual_id";
+    const onceKey = "immi_login_visual_once";
+    const loadId = String(performance.timeOrigin);
+
+    try {
+      const raw = sessionStorage.getItem(onceKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.loadId === loadId && parsed?.id) {
+          const found = JOURNEY_VISUALS.find((v) => v.id === parsed.id);
+          if (found) {
+            setVisual(found);
+            return;
+          }
+        }
+      }
+
+      const lastId = sessionStorage.getItem(lastKey);
+      const pool = JOURNEY_VISUALS.filter((v) => v.id !== lastId);
+      const choices = pool.length ? pool : JOURNEY_VISUALS;
+      const next = choices[Math.floor(Math.random() * choices.length)];
+      sessionStorage.setItem(onceKey, JSON.stringify({ id: next.id, loadId }));
+      sessionStorage.setItem(lastKey, next.id);
+      setVisual(next);
+    } catch {
+      setVisual(JOURNEY_VISUALS[Math.floor(Math.random() * JOURNEY_VISUALS.length)]);
+    }
+  }, []);
+
+  if (!visual) {
+    return <aside className="login-visual" aria-hidden="true" />;
+  }
+
+  const Renderer = JOURNEY_RENDERERS[visual.id] || JourneyVisualOrbit;
+
+  return (
+    <aside className={`login-visual login-visual-${visual.id}`} aria-hidden="true">
+      <Renderer visual={visual} />
     </aside>
   );
 }
