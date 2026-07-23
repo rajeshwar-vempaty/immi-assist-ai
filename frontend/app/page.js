@@ -45,6 +45,25 @@ const SERVICE_CENTERS = [
   "National Benefits Center",
 ];
 
+function SidebarIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="9" y1="4" x2="9" y2="20" />
+    </svg>
+  );
+}
+
 function groupHistory(items) {
   const buckets = [
     { label: "Today", items: [] },
@@ -73,6 +92,7 @@ export default function Home() {
   const { user, loading, signOut } = useAuth();
   const [tab, setTab] = useState("chat");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -112,6 +132,17 @@ export default function Home() {
     const entry = configuredCatalog.find((c) => c.id === provider);
     return entry?.models || [];
   }, [configuredCatalog, provider]);
+
+  useEffect(() => {
+    setSidebarCollapsed(localStorage.getItem("immi_sidebar_collapsed") === "1");
+  }, []);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((v) => {
+      localStorage.setItem("immi_sidebar_collapsed", v ? "0" : "1");
+      return !v;
+    });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -373,7 +404,7 @@ export default function Home() {
   })();
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className={`history-panel ${historyOpen ? "open-mobile" : ""}`}>
         <div className="sidebar-head">
           <div className="brand-mark">
@@ -383,6 +414,15 @@ export default function Home() {
               <p>Immigration guidance</p>
             </div>
           </div>
+          <button
+            type="button"
+            className="sidebar-toggle collapse"
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+            onClick={toggleSidebar}
+          >
+            <SidebarIcon />
+          </button>
           <button className="btn btn-ghost mobile-bar" onClick={() => setHistoryOpen(false)}>
             Close
           </button>
@@ -465,6 +505,17 @@ export default function Home() {
 
       <div className="main-panel">
         <header className="topbar">
+          {sidebarCollapsed && (
+            <button
+              type="button"
+              className="sidebar-toggle expand"
+              title="Open sidebar"
+              aria-label="Open sidebar"
+              onClick={toggleSidebar}
+            >
+              <SidebarIcon />
+            </button>
+          )}
           <div className="mobile-bar">
             <button className="btn btn-ghost" onClick={() => setHistoryOpen(true)}>
               History
