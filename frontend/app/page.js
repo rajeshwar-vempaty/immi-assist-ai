@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "../lib/auth";
+import ChatThinking from "../components/ChatThinking";
 import {
   analyzeRFE,
   createChecklist,
@@ -478,11 +479,7 @@ export default function Home() {
                       )}
                     </div>
                   ))}
-                  {isLoading && (
-                    <div className="bubble assistant" style={{ color: "var(--muted)" }}>
-                      Researching…
-                    </div>
-                  )}
+                  {isLoading && <ChatThinking />}
                   <div ref={messagesEndRef} />
                 </div>
               )}

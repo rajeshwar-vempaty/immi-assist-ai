@@ -54,15 +54,7 @@ function EyeIcon({ open }) {
   );
 }
 
-function PasswordField({
-  value,
-  onChange,
-  placeholder,
-  autoComplete,
-  style,
-  required = true,
-  minLength = 8,
-}) {
+function PasswordField({ value, onChange, placeholder, autoComplete, style }) {
   const [visible, setVisible] = useState(false);
   return (
     <div className="password-field" style={style}>
@@ -73,8 +65,8 @@ function PasswordField({
         onChange={onChange}
         placeholder={placeholder}
         autoComplete={autoComplete}
-        required={required}
-        minLength={minLength}
+        required
+        minLength={8}
       />
       <button
         type="button"
@@ -89,6 +81,30 @@ function PasswordField({
   );
 }
 
+function JourneyVisual() {
+  return (
+    <aside className="login-visual" aria-hidden="true">
+      <div className="login-visual-scene">
+        <div className="orbit orbit-a" />
+        <div className="orbit orbit-b" />
+        <div className="passport-card">
+          <div className="passport-stamp">IA</div>
+          <p>Status: Preparing</p>
+          <h3>Your next step, clarified.</h3>
+          <ul>
+            <li>Visa pathways</li>
+            <li>Document checklists</li>
+            <li>Timeline estimates</li>
+          </ul>
+        </div>
+        <div className="float-chip chip-a">I-485</div>
+        <div className="float-chip chip-b">H-1B</div>
+        <div className="float-chip chip-c">RFE</div>
+      </div>
+    </aside>
+  );
+}
+
 export default function LoginPage() {
   const { user, loading, setUser, refresh } = useAuth();
   const router = useRouter();
@@ -96,7 +112,8 @@ export default function LoginPage() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState("login"); // login | register
+  const [showEmail, setShowEmail] = useState(false);
+  const [mode, setMode] = useState("login");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -142,9 +159,9 @@ export default function LoginPage() {
         window.google.accounts.id.renderButton(googleBtn.current, {
           theme: "outline",
           size: "large",
-          width: 320,
+          width: 360,
           text: "continue_with",
-          shape: "rectangular",
+          shape: "pill",
         });
       } catch (err) {
         if (!cancelled) setError(err.message || "Could not initialize Google sign-in");
@@ -177,9 +194,7 @@ export default function LoginPage() {
         if (data.welcome_email?.sent) {
           setNotice("Account created. A welcome summary was sent to your email.");
         } else {
-          setNotice(
-            "Account created. A welcome summary was prepared for your email (configure SMTP to deliver it)."
-          );
+          setNotice("Account created. Welcome summary prepared for your email.");
         }
         await finishAuth(data);
       } else {
@@ -195,8 +210,8 @@ export default function LoginPage() {
 
   if (loading) {
     return (
-      <div className="login-shell">
-        <div className="login-card">
+      <div className="login-landing">
+        <div className="login-panel">
           <p style={{ color: "var(--muted)" }}>Checking session…</p>
         </div>
       </div>
@@ -204,120 +219,141 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="login-shell">
-      <div className="login-card">
-        <div className="brand-mark" style={{ marginBottom: 18 }}>
+    <div className="login-landing">
+      <div className="login-panel">
+        <div className="brand-mark brand-mark-lg">
           <div className="mark">IA</div>
           <div>
             <h1>ImmiAssist</h1>
-            <p>Sign in to continue</p>
+            <p>Immigration guidance</p>
           </div>
         </div>
-        <h2 className="login-title">Welcome</h2>
-        <p className="login-sub">
-          Continue with Google, or create an account with your email. Your chat history and API keys
-          stay private to your account.
+
+        <h2 className="login-hero-title">Ask clearly. File calmly.</h2>
+        <p className="login-hero-sub">
+          Grounded answers on visas, documents, timelines, and RFEs — so you can take the next step
+          with less guesswork.
         </p>
 
         {error && <div className="error-banner">{error}</div>}
         {notice && (
-          <div className="error-banner" style={{ background: "rgba(15, 118, 110, 0.12)", color: "var(--ink)" }}>
+          <div
+            className="error-banner"
+            style={{ background: "rgba(15, 118, 110, 0.12)", color: "var(--ink)" }}
+          >
             {notice}
           </div>
         )}
 
-        {config?.google_client_id ? (
-          <div ref={googleBtn} style={{ display: "flex", justifyContent: "center", minHeight: 44 }} />
-        ) : (
-          <p className="disclaimer">
-            Google Client ID is not configured. You can still register with email below.
+        <div className="login-cta-stack">
+          {config?.google_client_id ? (
+            <div ref={googleBtn} className="google-btn-slot" />
+          ) : (
+            <p className="disclaimer">Google sign-in is not configured yet.</p>
+          )}
+
+          {!showEmail ? (
+            <button
+              type="button"
+              className="btn btn-ghost email-cta"
+              onClick={() => setShowEmail(true)}
+            >
+              Sign in with email
+            </button>
+          ) : (
+            <div className="email-auth-block">
+              <div className="auth-tabs" role="tablist" aria-label="Account">
+                <button
+                  type="button"
+                  className={`auth-tab ${mode === "login" ? "active" : ""}`}
+                  onClick={() => setMode("login")}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  className={`auth-tab ${mode === "register" ? "active" : ""}`}
+                  onClick={() => setMode("register")}
+                >
+                  Join now
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} style={{ marginTop: 12 }}>
+                {mode === "register" && (
+                  <input
+                    className="field"
+                    style={{ marginBottom: 8 }}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Username"
+                    autoComplete="username"
+                    required
+                    minLength={2}
+                  />
+                )}
+                <input
+                  className="field"
+                  type="email"
+                  style={{ marginBottom: 8 }}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email"
+                  autoComplete="email"
+                  required
+                />
+                <PasswordField
+                  style={{ marginBottom: mode === "register" ? 8 : 10 }}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  autoComplete={mode === "register" ? "new-password" : "current-password"}
+                />
+                {mode === "register" && (
+                  <PasswordField
+                    style={{ marginBottom: 10 }}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm password"
+                    autoComplete="new-password"
+                  />
+                )}
+                <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy}>
+                  {busy
+                    ? mode === "register"
+                      ? "Creating account…"
+                      : "Signing in…"
+                    : mode === "register"
+                      ? "Create account"
+                      : "Sign in with email"}
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+
+        <p className="login-legal">
+          By continuing, you agree this tool provides informational guidance only — not legal advice.
+        </p>
+
+        {!showEmail && (
+          <p className="login-join">
+            New to ImmiAssist?{" "}
+            <button
+              type="button"
+              className="text-link"
+              onClick={() => {
+                setShowEmail(true);
+                setMode("register");
+              }}
+            >
+              Join now
+            </button>
           </p>
         )}
-
-        <div className="auth-divider">
-          <span>or</span>
-        </div>
-
-        <div className="auth-tabs" role="tablist" aria-label="Account">
-          <button
-            type="button"
-            className={`auth-tab ${mode === "login" ? "active" : ""}`}
-            onClick={() => setMode("login")}
-          >
-            Sign in
-          </button>
-          <button
-            type="button"
-            className={`auth-tab ${mode === "register" ? "active" : ""}`}
-            onClick={() => setMode("register")}
-          >
-            Create account
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} style={{ marginTop: 12 }}>
-          {mode === "register" && (
-            <input
-              className="field"
-              style={{ marginBottom: 8 }}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username"
-              autoComplete="username"
-              required
-              minLength={2}
-            />
-          )}
-          <input
-            className="field"
-            type="email"
-            style={{ marginBottom: 8 }}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            autoComplete="email"
-            required
-          />
-          <input
-            className="field"
-            type="password"
-            style={{ marginBottom: mode === "register" ? 8 : 10 }}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            autoComplete={mode === "register" ? "new-password" : "current-password"}
-            required
-            minLength={8}
-          />
-          {mode === "register" && (
-            <input
-              className="field"
-              type="password"
-              style={{ marginBottom: 10 }}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-            />
-          )}
-          <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy}>
-            {busy
-              ? mode === "register"
-                ? "Creating account…"
-                : "Signing in…"
-              : mode === "register"
-                ? "Create account"
-                : "Sign in with email"}
-          </button>
-          {mode === "register" && (
-            <p className="disclaimer" style={{ marginTop: 10 }}>
-              We’ll email you a short summary of what ImmiAssist does after you register.
-            </p>
-          )}
-        </form>
       </div>
+
+      <JourneyVisual />
     </div>
   );
 }
