@@ -10,7 +10,7 @@ import {
 } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 
-function waitForGoogle(timeoutMs = 8000) {
+function waitForGoogle(timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     if (typeof window !== "undefined" && window.google?.accounts?.id) {
       resolve(window.google);
@@ -25,7 +25,7 @@ function waitForGoogle(timeoutMs = 8000) {
         clearInterval(timer);
         reject(new Error("Google Identity Services failed to load"));
       }
-    }, 100);
+    }, 50);
   });
 }
 
@@ -53,10 +53,12 @@ function GoogleGIcon() {
 }
 
 function GoogleSignInButton({ clientId, disabled, onCredential, onError }) {
-  const [slotEl, setSlotEl] = useState(null);
+  const hostRef = useRef(null);
   const [gisReady, setGisReady] = useState(false);
+  const [initError, setInitError] = useState(null);
   const onCredentialRef = useRef(onCredential);
   const onErrorRef = useRef(onError);
+  const initGen = useRef(0);
 
   useEffect(() => {
     onCredentialRef.current = onCredential;
@@ -64,23 +66,30 @@ function GoogleSignInButton({ clientId, disabled, onCredential, onError }) {
   }, [onCredential, onError]);
 
   useEffect(() => {
-    if (!clientId || !slotEl) return undefined;
+    if (!clientId) return undefined;
 
+    const host = hostRef.current;
+    if (!host) return undefined;
+
+    const gen = ++initGen.current;
     let cancelled = false;
+    let ro = null;
 
-    (async () => {
+    const render = async () => {
       try {
         await waitForGoogle();
-        if (cancelled || !slotEl) return;
+        if (cancelled || gen !== initGen.current || !hostRef.current) return;
 
         window.google.accounts.id.initialize({
           client_id: clientId,
           callback: (response) => onCredentialRef.current?.(response),
+          cancel_on_tap_outside: true,
         });
 
-        const width = Math.max(240, Math.floor(slotEl.getBoundingClientRect().width) || 360);
-        slotEl.innerHTML = "";
-        window.google.accounts.id.renderButton(slotEl, {
+        const el = hostRef.current;
+        const width = Math.max(280, Math.round(el.getBoundingClientRect().width) || 360);
+        el.innerHTML = "";
+        window.google.accounts.id.renderButton(el, {
           theme: "outline",
           size: "large",
           width,
@@ -89,31 +98,64 @@ function GoogleSignInButton({ clientId, disabled, onCredential, onError }) {
           logo_alignment: "left",
         });
 
-        if (!cancelled) setGisReady(true);
+        if (!cancelled && gen === initGen.current) {
+          setGisReady(true);
+          setInitError(null);
+        }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && gen === initGen.current) {
           setGisReady(false);
-          onErrorRef.current?.(err.message || "Could not initialize Google sign-in");
+          const message = err.message || "Could not initialize Google sign-in";
+          setInitError(message);
+          onErrorRef.current?.(message);
         }
       }
-    })();
+    };
+
+    const start = () => {
+      const el = hostRef.current;
+      if (!el) return;
+      if (el.getBoundingClientRect().width < 40) {
+        ro = new ResizeObserver(() => {
+          if (hostRef.current && hostRef.current.getBoundingClientRect().width >= 40) {
+            ro?.disconnect();
+            ro = null;
+            render();
+          }
+        });
+        ro.observe(el);
+        return;
+      }
+      render();
+    };
+
+    start();
 
     return () => {
       cancelled = true;
+      ro?.disconnect();
     };
-  }, [clientId, slotEl]);
+  }, [clientId]);
+
+  const handleFallbackClick = () => {
+    if (disabled) return;
+    if (gisReady) return; // GIS overlay should receive the click
+    onErrorRef.current?.(initError || "Google sign-in is still loading. Try again in a moment.");
+  };
 
   return (
     <div className={`google-btn-wrap ${gisReady ? "is-ready" : ""}`}>
-      <div className="google-btn-fallback" aria-hidden={gisReady}>
+      <button
+        type="button"
+        className="google-btn-fallback"
+        onClick={handleFallbackClick}
+        disabled={disabled}
+        tabIndex={gisReady ? -1 : 0}
+      >
         <GoogleGIcon />
         <span>{disabled ? "Please wait…" : "Continue with Google"}</span>
-      </div>
-      <div
-        ref={setSlotEl}
-        className="google-btn-slot"
-        aria-label="Continue with Google"
-      />
+      </button>
+      <div ref={hostRef} className="google-btn-slot" aria-hidden={!gisReady} />
     </div>
   );
 }
@@ -214,6 +256,7 @@ function pickPerVisit(items, { lastKey, onceKey, forcedId } = {}) {
   if (forcedId) {
     return items.find((item) => item.id === forcedId) || items[0];
   }
+  if (typeof window === "undefined") return items[0];
 
   const loadId = String(performance.timeOrigin);
   try {
@@ -236,6 +279,19 @@ function pickPerVisit(items, { lastKey, onceKey, forcedId } = {}) {
   } catch {
     return items[Math.floor(Math.random() * items.length)];
   }
+}
+
+function readClientPick(items, keys) {
+  if (typeof window === "undefined") return items[0];
+  const params = new URLSearchParams(window.location.search);
+  const forcedId = params.get(keys.param);
+  return (
+    pickPerVisit(items, {
+      lastKey: keys.lastKey,
+      onceKey: keys.onceKey,
+      forcedId,
+    }) || items[0]
+  );
 }
 
 const JOURNEY_VISUALS = [
@@ -416,27 +472,29 @@ const JOURNEY_RENDERERS = {
 };
 
 function JourneyVisual() {
-  const [visual, setVisual] = useState(null);
+  // Pick synchronously on the client so the scene is present on first paint (no empty flash).
+  const [visual] = useState(() =>
+    readClientPick(JOURNEY_VISUALS, {
+      param: "visual",
+      lastKey: "immi_login_visual_id",
+      onceKey: "immi_login_visual_once",
+    })
+  );
+  const [animated, setAnimated] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setVisual(
-      pickPerVisit(JOURNEY_VISUALS, {
-        lastKey: "immi_login_visual_id",
-        onceKey: "immi_login_visual_once",
-        forcedId: params.get("visual"),
-      })
-    );
+    const timer = window.setTimeout(() => setAnimated(true), 80);
+    return () => window.clearTimeout(timer);
   }, []);
-
-  if (!visual) {
-    return <aside className="login-visual" aria-hidden="true" />;
-  }
 
   const Renderer = JOURNEY_RENDERERS[visual.id] || JourneyVisualOrbit;
 
   return (
-    <aside className={`login-visual login-visual-${visual.id}`} aria-hidden="true">
+    <aside
+      className={`login-visual login-visual-${visual.id} ${animated ? "is-animated" : ""}`}
+      aria-hidden="true"
+      suppressHydrationWarning
+    >
       <Renderer visual={visual} />
     </aside>
   );
@@ -455,23 +513,18 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [heroCopy, setHeroCopy] = useState(LOGIN_HERO_COPY[0]);
+  const [heroCopy] = useState(() =>
+    readClientPick(LOGIN_HERO_COPY, {
+      param: "hero",
+      lastKey: "immi_login_hero_id",
+      onceKey: "immi_login_hero_once",
+    })
+  );
 
   useEffect(() => {
     getAuthConfig()
       .then(setConfig)
       .catch(() => setConfig({ google_client_id: null, password_auth_enabled: true }));
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setHeroCopy(
-      pickPerVisit(LOGIN_HERO_COPY, {
-        lastKey: "immi_login_hero_id",
-        onceKey: "immi_login_hero_once",
-        forcedId: params.get("hero"),
-      })
-    );
   }, []);
 
   useEffect(() => {
@@ -534,16 +587,18 @@ export default function LoginPage() {
     }
   };
 
-  if (loading) {
+  if (loading && user) {
     return (
       <div className="login-landing">
         <div className="login-panel">
-          <p style={{ color: "var(--muted)" }}>Checking session…</p>
+          <p style={{ color: "var(--muted)" }}>Taking you in…</p>
         </div>
       </div>
     );
   }
 
+  // Show the full login chrome immediately (do not wait on session check),
+  // so Google + visual mount once and stay stable across refresh.
   const title = showEmail
     ? mode === "register"
       ? "Create your account"
@@ -589,7 +644,7 @@ export default function LoginPage() {
             {config?.google_client_id ? (
               <GoogleSignInButton
                 clientId={config.google_client_id}
-                disabled={busy}
+                disabled={busy || loading}
                 onCredential={handleGoogleCredential}
                 onError={setError}
               />
@@ -597,9 +652,9 @@ export default function LoginPage() {
               <p className="disclaimer">Google sign-in is not configured yet.</p>
             ) : (
               <div className="google-btn-wrap">
-                <div className="google-btn-fallback">
+                <div className="google-btn-fallback" aria-hidden="true">
                   <GoogleGIcon />
-                  <span>Loading Google…</span>
+                  <span>Continue with Google</span>
                 </div>
               </div>
             )}

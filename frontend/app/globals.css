@@ -699,30 +699,38 @@ a {
   min-height: 44px;
   padding: 10px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(11, 28, 40, 0.16);
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(11, 28, 40, 0.28);
+  background: #fff;
   color: var(--ink);
   font-size: 0.95rem;
   font-weight: 600;
   box-sizing: border-box;
+  cursor: pointer;
+  font: inherit;
+}
+
+.google-btn-fallback:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .google-btn-slot {
   position: absolute;
   inset: 0;
+  z-index: 2;
   min-height: 44px;
   display: flex;
   justify-content: stretch;
   align-items: stretch;
   overflow: hidden;
   border-radius: 12px;
-  /* Invisible overlay: our styled button stays visible; GIS captures clicks when ready. */
-  opacity: 0.02;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.google-btn-wrap:not(.is-ready) .google-btn-slot {
-  pointer-events: none;
-  opacity: 0;
+/* Invisible but clickable GIS layer — styled fallback underneath always stays visible. */
+.google-btn-wrap.is-ready .google-btn-slot {
+  pointer-events: auto;
 }
 
 .google-btn-slot > div,
@@ -833,7 +841,6 @@ a {
   background:
     radial-gradient(800px 500px at 70% 20%, rgba(31, 111, 106, 0.22), transparent 60%),
     linear-gradient(160deg, #d9ebe8 0%, #efe7d6 45%, #d7e4ee 100%);
-  transition: background 280ms ease;
 }
 
 .login-visual-timeline {
@@ -864,6 +871,12 @@ a {
   position: relative;
   width: min(520px, 100%);
   aspect-ratio: 1 / 1.05;
+  opacity: 1;
+  transform: none;
+}
+
+.login-visual.is-animated .login-visual-scene {
+  animation: visual-settle 420ms ease both;
 }
 
 .orbit {
@@ -874,12 +887,18 @@ a {
 
 .orbit-a {
   inset: 8% 12%;
-  animation: drift 12s ease-in-out infinite;
 }
 
 .orbit-b {
   inset: 22% 24%;
-  animation: drift 9s ease-in-out infinite reverse;
+}
+
+.login-visual.is-animated .orbit-a {
+  animation: drift 14s ease-in-out infinite;
+}
+
+.login-visual.is-animated .orbit-b {
+  animation: drift 11s ease-in-out infinite reverse;
 }
 
 .passport-card,
@@ -898,7 +917,10 @@ a {
   inset: 22% 18%;
   border-radius: 22px;
   padding: 28px;
-  animation: floaty 6s ease-in-out infinite;
+}
+
+.login-visual.is-animated .passport-card {
+  animation: floaty 7s ease-in-out infinite;
 }
 
 .passport-stamp {
@@ -964,19 +986,28 @@ a {
 .chip-a {
   top: 12%;
   left: 8%;
-  animation: floaty 5s ease-in-out infinite;
 }
 
 .chip-b {
   top: 18%;
   right: 6%;
-  animation: floaty 7s ease-in-out infinite 0.4s;
 }
 
 .chip-c {
   bottom: 14%;
   right: 16%;
-  animation: floaty 6.5s ease-in-out infinite 0.8s;
+}
+
+.login-visual.is-animated .chip-a {
+  animation: floaty 6s ease-in-out infinite;
+}
+
+.login-visual.is-animated .chip-b {
+  animation: floaty 8s ease-in-out infinite 0.4s;
+}
+
+.login-visual.is-animated .chip-c {
+  animation: floaty 7s ease-in-out infinite 0.8s;
 }
 
 /* Timeline layout */
@@ -994,8 +1025,7 @@ a {
   inset: 16% 12% 16% 28%;
   border-radius: 22px;
   padding: 28px;
-  animation: floaty 7s ease-in-out infinite;
-}
+  }
 
 .timeline-steps {
   list-style: none;
@@ -1029,20 +1059,17 @@ a {
 .chip-t1 {
   top: 10%;
   left: 6%;
-  animation: floaty 5.5s ease-in-out infinite;
-}
+  }
 
 .chip-t2 {
   top: 42%;
   left: 4%;
-  animation: floaty 6.5s ease-in-out infinite 0.3s;
-}
+  }
 
 .chip-t3 {
   bottom: 12%;
   left: 8%;
-  animation: floaty 7s ease-in-out infinite 0.6s;
-}
+  }
 
 /* Dossier / stacked docs */
 .dossier-stack {
@@ -1070,26 +1097,22 @@ a {
 
 .dossier-sheet.sheet-front {
   padding: 28px;
-  animation: floaty 6.5s ease-in-out infinite;
-}
+  }
 
 .chip-d1 {
   top: 8%;
   right: 4%;
-  animation: floaty 5s ease-in-out infinite;
-}
+  }
 
 .chip-d2 {
   bottom: 20%;
   left: 2%;
-  animation: floaty 6s ease-in-out infinite 0.35s;
-}
+  }
 
 .chip-d3 {
   bottom: 8%;
   right: 10%;
-  animation: floaty 7s ease-in-out infinite 0.7s;
-}
+  }
 
 /* Route / pathway map */
 .route-path {
@@ -1104,7 +1127,7 @@ a {
   stroke: rgba(11, 28, 40, 0.18);
   stroke-width: 2;
   stroke-dasharray: 6 8;
-  animation: route-dash 14s linear infinite;
+  
 }
 
 .route-node {
@@ -1131,26 +1154,22 @@ a {
   bottom: 10%;
   border-radius: 22px;
   padding: 24px 26px;
-  animation: floaty 6s ease-in-out infinite;
-}
+  }
 
 .chip-r1 {
   top: 12%;
   right: 10%;
-  animation: floaty 5.5s ease-in-out infinite;
-}
+  }
 
 .chip-r2 {
   top: 38%;
   left: 8%;
-  animation: floaty 6.5s ease-in-out infinite 0.4s;
-}
+  }
 
 .chip-r3 {
   top: 18%;
   left: 28%;
-  animation: floaty 7s ease-in-out infinite 0.8s;
-}
+  }
 
 /* Horizon */
 .horizon-glow {
@@ -1161,8 +1180,7 @@ a {
   height: 42%;
   border-radius: 50%;
   background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.55), transparent 68%);
-  animation: drift 10s ease-in-out infinite;
-}
+  }
 
 .horizon-line {
   position: absolute;
@@ -1178,31 +1196,64 @@ a {
   inset: 18% 16% 32%;
   border-radius: 22px;
   padding: 28px;
-  animation: floaty 7s ease-in-out infinite;
-}
+  }
 
 .chip-h1 {
   bottom: 14%;
   left: 12%;
-  animation: floaty 5s ease-in-out infinite;
-}
+  }
 
 .chip-h2 {
   bottom: 10%;
   right: 18%;
-  animation: floaty 6s ease-in-out infinite 0.45s;
-}
+  }
 
 .chip-h3 {
   bottom: 18%;
   left: 42%;
-  animation: floaty 7s ease-in-out infinite 0.9s;
-}
+  }
 
 @keyframes route-dash {
   to {
     stroke-dashoffset: -140;
   }
+}
+
+
+.login-visual.is-animated .timeline-panel,
+.login-visual.is-animated .dossier-sheet.sheet-front,
+.login-visual.is-animated .route-card,
+.login-visual.is-animated .horizon-card {
+  animation: floaty 8s ease-in-out infinite;
+}
+
+.login-visual.is-animated .horizon-glow {
+  animation: drift 12s ease-in-out infinite;
+}
+
+.login-visual.is-animated .chip-t1,
+.login-visual.is-animated .chip-d1,
+.login-visual.is-animated .chip-r1,
+.login-visual.is-animated .chip-h1 {
+  animation: floaty 6s ease-in-out infinite;
+}
+
+.login-visual.is-animated .chip-t2,
+.login-visual.is-animated .chip-d2,
+.login-visual.is-animated .chip-r2,
+.login-visual.is-animated .chip-h2 {
+  animation: floaty 7s ease-in-out infinite 0.35s;
+}
+
+.login-visual.is-animated .chip-t3,
+.login-visual.is-animated .chip-d3,
+.login-visual.is-animated .chip-r3,
+.login-visual.is-animated .chip-h3 {
+  animation: floaty 8s ease-in-out infinite 0.7s;
+}
+
+.login-visual.is-animated .route-line {
+  animation: route-dash 14s linear infinite;
 }
 
 @keyframes floaty {
@@ -1211,7 +1262,18 @@ a {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-10px);
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes visual-settle {
+  from {
+    opacity: 0.72;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
