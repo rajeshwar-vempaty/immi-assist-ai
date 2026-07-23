@@ -89,3 +89,4 @@ def test_chat_timeline_uses_form_number_instead_of_visa_label(
     system_prompt = adapter.chat.call_args.kwargs["system_prompt"]
     assert "- Petition/Form Type: I-129" in system_prompt
     assert "- Petition/Form Type: H1B" not in system_prompt
+    assert "- Category: H1B" in system_prompt

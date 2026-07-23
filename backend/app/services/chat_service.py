@@ -118,6 +118,43 @@ def _humanize_structured_response(intent: Intent, content: str) -> str:
     return _format_checklist_text(data)
 
 
+def _detect_visa_type(message: str) -> str | None:
+    """Best-effort visa/category label from the user message (from main keyword classifier)."""
+    message_lower = message.lower()
+    compact = message_lower.replace(" ", "")
+    for token in (
+        "h-1b",
+        "h1b",
+        "h4",
+        "l-1a",
+        "l1a",
+        "l-1b",
+        "l1b",
+        "o-1",
+        "o1",
+        "eb-1",
+        "eb1",
+        "eb-2",
+        "eb2",
+        "eb-3",
+        "eb3",
+        "niw",
+        "f-1",
+        "f1",
+        "opt",
+        "i-485",
+        "i485",
+        "i-140",
+        "i140",
+        "i-129",
+        "i129",
+    ):
+        if token in compact or token in message_lower:
+            visa_type = token.upper().replace("-", "")
+            return visa_type
+    return None
+
+
 def _keyword_intent(message: str) -> Intent:
     lower = message.lower()
     if any(k in lower for k in ["rfe", "request for evidence", "noid"]):
@@ -154,6 +191,7 @@ class ChatService:
 
         intent = _keyword_intent(request.message)
         confidence = 0.7
+        visa_type = _detect_visa_type(request.message)
 
         if intent == Intent.CASE_SPECIFIC:
             response_text = CASE_SPECIFIC_REDIRECT
@@ -205,14 +243,14 @@ class ChatService:
 
         if intent == Intent.CHECKLIST:
             system_prompt = CHECKLIST_PROMPT.format(
-                visa_type="Unknown",
+                visa_type=visa_type or "Unknown",
                 details=request.message,
                 context=context,
             )
         elif intent == Intent.RFE_HELP:
             system_prompt = RFE_ANALYSIS_PROMPT.format(
                 rfe_text=request.message,
-                petition_type="Unknown",
+                petition_type=visa_type or "Unknown",
                 context=context,
             )
         elif intent == Intent.TIMELINE:
@@ -220,7 +258,7 @@ class ChatService:
                 form_type=_resolve_timeline_form_type(None, request.message),
                 service_center="Unknown",
                 filing_date="Not provided",
-                category="General",
+                category=visa_type or "General",
                 processing_data=context,
                 context=context,
             )
