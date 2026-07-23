@@ -153,12 +153,38 @@ export async function deleteConversation(id) {
   return apiRequest(`/conversations/${id}`, { method: "DELETE" });
 }
 
+export async function truncateConversation(conversationId, messageId) {
+  return apiRequest(`/conversations/${conversationId}/messages/${messageId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function createChecklist(payload) {
   return apiRequest("/checklist", { method: "POST", body: JSON.stringify(payload) });
 }
 
 export async function estimateTimeline(payload) {
   return apiRequest("/timeline", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function getUscisForms() {
+  return apiRequest("/timeline/uscis/forms");
+}
+
+export async function getUscisCategories(form) {
+  return apiRequest(`/timeline/uscis/categories?form=${encodeURIComponent(form)}`);
+}
+
+export async function getUscisOffices(form, category) {
+  return apiRequest(
+    `/timeline/uscis/offices?form=${encodeURIComponent(form)}&category=${encodeURIComponent(category)}`
+  );
+}
+
+export async function getUscisProcessingTime(form, category, office) {
+  return apiRequest(
+    `/timeline/uscis/processing-time?form=${encodeURIComponent(form)}&category=${encodeURIComponent(category)}&office=${encodeURIComponent(office)}`
+  );
 }
 
 export async function analyzeRFE(payload) {

@@ -1,0 +1,128 @@
+{
+  "as_of": "2026-06",
+  "source_url": "https://egov.uscis.gov/processing-times/",
+  "note": "Snapshot of USCIS published processing times used when the live egov.uscis.gov API is unreachable. Values are the '80% of cases completed within' figures.",
+  "forms": [
+    { "id": "I-129", "description": "Petition for a Nonimmigrant Worker" },
+    { "id": "I-130", "description": "Petition for Alien Relative" },
+    { "id": "I-131", "description": "Application for Travel Document" },
+    { "id": "I-140", "description": "Immigrant Petition for Alien Worker" },
+    { "id": "I-485", "description": "Application to Register Permanent Residence or Adjust Status" },
+    { "id": "I-539", "description": "Application to Extend/Change Nonimmigrant Status" },
+    { "id": "I-765", "description": "Application for Employment Authorization" },
+    { "id": "I-751", "description": "Petition to Remove Conditions on Residence" },
+    { "id": "I-90", "description": "Application to Replace Permanent Resident Card" },
+    { "id": "N-400", "description": "Application for Naturalization" }
+  ],
+  "categories": {
+    "I-129": [
+      { "id": "e-treaty", "description": "E - Treaty traders and investors" },
+      { "id": "h-1b", "description": "H-1B - Specialty occupation" },
+      { "id": "h-2a", "description": "H-2A - Temporary agricultural workers" },
+      { "id": "h-2b", "description": "H-2B - Temporary non-agricultural workers" },
+      { "id": "l-1", "description": "L - Intracompany transferees" },
+      { "id": "o-1", "description": "O - Extraordinary ability" },
+      { "id": "tn", "description": "TN - North American Free Trade Agreement (NAFTA) professional" }
+    ],
+    "I-130": [
+      { "id": "immediate-relative", "description": "Immediate relative of a U.S. citizen (spouse, parent, or child under 21)" },
+      { "id": "f1", "description": "F1 - Unmarried son or daughter of a U.S. citizen" },
+      { "id": "f2a", "description": "F2A - Spouse or child of a permanent resident" },
+      { "id": "f2b", "description": "F2B - Unmarried son or daughter (21 or older) of a permanent resident" },
+      { "id": "f3", "description": "F3 - Married son or daughter of a U.S. citizen" },
+      { "id": "f4", "description": "F4 - Brother or sister of a U.S. citizen" }
+    ],
+    "I-131": [
+      { "id": "advance-parole", "description": "Advance parole document (based on pending adjustment application)" },
+      { "id": "refugee-travel", "description": "Refugee or asylee applying for a refugee travel document" }
+    ],
+    "I-140": [
+      { "id": "eb1-extraordinary", "description": "Extraordinary ability (E11)" },
+      { "id": "eb1-multinational", "description": "Multinational executive or manager (E13)" },
+      { "id": "eb2-advanced", "description": "Advanced degree or exceptional ability (E21)" },
+      { "id": "eb2-niw", "description": "National Interest Waiver (NIW)" },
+      { "id": "eb3-skilled", "description": "Skilled worker or professional (E31/E32)" }
+    ],
+    "I-485": [
+      { "id": "employment", "description": "Employment-based adjustment applications" },
+      { "id": "family", "description": "Family-based adjustment applications" },
+      { "id": "asylum", "description": "Asylum-based adjustment applications" }
+    ],
+    "I-539": [
+      { "id": "extend-b", "description": "Extension of stay (B-1/B-2)" },
+      { "id": "change-f", "description": "Change of status to F-1/F-2" },
+      { "id": "h4", "description": "H-4 dependents" }
+    ],
+    "I-765": [
+      { "id": "c3", "description": "(c)(3) - F-1 students (OPT/STEM OPT)" },
+      { "id": "c8", "description": "(c)(8) - Pending asylum applications" },
+      { "id": "c9", "description": "(c)(9) - Pending adjustment of status (I-485)" },
+      { "id": "c26", "description": "(c)(26) - H-4 spouses" }
+    ],
+    "I-751": [
+      { "id": "joint", "description": "Removal of lawful permanent resident conditions (spouses of U.S. citizens and permanent residents)" }
+    ],
+    "I-90": [
+      { "id": "initial", "description": "Initial issuance or replacement" }
+    ],
+    "N-400": [
+      { "id": "military", "description": "Military naturalization" },
+      { "id": "standard", "description": "Naturalization (all other categories)" }
+    ]
+  },
+  "offices": {
+    "default": [
+      { "id": "scops", "description": "Service Center Operations (SCOPS)" }
+    ],
+    "I-485|family": [
+      { "id": "nbc", "description": "National Benefits Center" },
+      { "id": "field-median", "description": "All Field Offices (national median)" }
+    ],
+    "I-485|asylum": [
+      { "id": "nbc", "description": "National Benefits Center" }
+    ],
+    "N-400|standard": [
+      { "id": "field-median", "description": "All Field Offices (national median)" }
+    ],
+    "N-400|military": [
+      { "id": "nbc", "description": "National Benefits Center" }
+    ]
+  },
+  "times": {
+    "I-129|e-treaty|scops": 18.5,
+    "I-129|h-1b|scops": 4.5,
+    "I-129|h-2a|scops": 1.5,
+    "I-129|h-2b|scops": 2.5,
+    "I-129|l-1|scops": 5.0,
+    "I-129|o-1|scops": 4.0,
+    "I-129|tn|scops": 5.5,
+    "I-130|immediate-relative|scops": 17.0,
+    "I-130|f1|scops": 30.5,
+    "I-130|f2a|scops": 26.0,
+    "I-130|f2b|scops": 34.5,
+    "I-130|f3|scops": 38.0,
+    "I-130|f4|scops": 42.5,
+    "I-131|advance-parole|scops": 9.5,
+    "I-131|refugee-travel|scops": 12.0,
+    "I-140|eb1-extraordinary|scops": 9.0,
+    "I-140|eb1-multinational|scops": 11.5,
+    "I-140|eb2-advanced|scops": 10.0,
+    "I-140|eb2-niw|scops": 12.5,
+    "I-140|eb3-skilled|scops": 10.5,
+    "I-485|employment|scops": 11.5,
+    "I-485|family|nbc": 13.0,
+    "I-485|family|field-median": 15.5,
+    "I-485|asylum|nbc": 22.0,
+    "I-539|extend-b|scops": 7.5,
+    "I-539|change-f|scops": 9.0,
+    "I-539|h4|scops": 6.5,
+    "I-765|c3|scops": 3.5,
+    "I-765|c8|scops": 8.0,
+    "I-765|c9|scops": 7.0,
+    "I-765|c26|scops": 6.5,
+    "I-751|joint|scops": 21.5,
+    "I-90|initial|scops": 8.5,
+    "N-400|standard|field-median": 8.0,
+    "N-400|military|nbc": 10.0
+  }
+}
