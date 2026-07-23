@@ -54,10 +54,10 @@ function EyeIcon({ open }) {
   );
 }
 
-function PasswordField({ value, onChange, placeholder, autoComplete, style }) {
+function PasswordField({ value, onChange, placeholder, autoComplete }) {
   const [visible, setVisible] = useState(false);
   return (
-    <div className="password-field" style={style}>
+    <div className="password-field">
       <input
         className="field"
         type={visible ? "text" : "password"}
@@ -161,7 +161,7 @@ export default function LoginPage() {
           size: "large",
           width: 360,
           text: "continue_with",
-          shape: "pill",
+          shape: "rectangular",
         });
       } catch (err) {
         if (!cancelled) setError(err.message || "Could not initialize Google sign-in");
@@ -172,6 +172,12 @@ export default function LoginPage() {
       cancelled = true;
     };
   }, [config, router, setUser, refresh]);
+
+  const openEmail = (nextMode) => {
+    setShowEmail(true);
+    setMode(nextMode);
+    setError(null);
+  };
 
   const finishAuth = async (data) => {
     setUser(data.user);
@@ -218,139 +224,182 @@ export default function LoginPage() {
     );
   }
 
+  const title = showEmail
+    ? mode === "register"
+      ? "Create your account"
+      : "Welcome back"
+    : "Ask clearly. File calmly.";
+
+  const subtitle = showEmail
+    ? mode === "register"
+      ? "Join with email to keep chat history and API keys private to your account."
+      : "Sign in with email, or keep using Google above."
+    : "Grounded answers on visas, documents, timelines, and RFEs — so you can take the next step with less guesswork.";
+
   return (
-    <div className="login-landing">
+    <div className={`login-landing ${showEmail ? "is-email-open" : ""}`}>
       <div className="login-panel">
-        <div className="brand-mark brand-mark-lg">
-          <div className="mark">IA</div>
-          <div>
-            <h1>ImmiAssist</h1>
-            <p>Immigration guidance</p>
+        <header className="login-panel-header">
+          <div className="brand-mark brand-mark-lg">
+            <div className="mark">IA</div>
+            <div>
+              <h1>ImmiAssist</h1>
+              <p>Immigration guidance</p>
+            </div>
           </div>
-        </div>
+        </header>
 
-        <h2 className="login-hero-title">Ask clearly. File calmly.</h2>
-        <p className="login-hero-sub">
-          Grounded answers on visas, documents, timelines, and RFEs — so you can take the next step
-          with less guesswork.
-        </p>
-
-        {error && <div className="error-banner">{error}</div>}
-        {notice && (
-          <div
-            className="error-banner"
-            style={{ background: "rgba(15, 118, 110, 0.12)", color: "var(--ink)" }}
-          >
-            {notice}
+        <div className="login-panel-main">
+          <div className="login-copy">
+            <h2 className="login-hero-title">{title}</h2>
+            <p className="login-hero-sub">{subtitle}</p>
           </div>
-        )}
 
-        <div className="login-cta-stack">
-          {config?.google_client_id ? (
-            <div ref={googleBtn} className="google-btn-slot" />
-          ) : (
-            <p className="disclaimer">Google sign-in is not configured yet.</p>
-          )}
-
-          {!showEmail ? (
-            <button
-              type="button"
-              className="btn btn-ghost email-cta"
-              onClick={() => setShowEmail(true)}
+          {error && <div className="error-banner">{error}</div>}
+          {notice && (
+            <div
+              className="error-banner"
+              style={{ background: "rgba(15, 118, 110, 0.12)", color: "var(--ink)" }}
             >
-              Sign in with email
-            </button>
-          ) : (
-            <div className="email-auth-block">
-              <div className="auth-tabs" role="tablist" aria-label="Account">
-                <button
-                  type="button"
-                  className={`auth-tab ${mode === "login" ? "active" : ""}`}
-                  onClick={() => setMode("login")}
-                >
-                  Sign in
-                </button>
-                <button
-                  type="button"
-                  className={`auth-tab ${mode === "register" ? "active" : ""}`}
-                  onClick={() => setMode("register")}
-                >
-                  Join now
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmit} style={{ marginTop: 12 }}>
-                {mode === "register" && (
-                  <input
-                    className="field"
-                    style={{ marginBottom: 8 }}
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Username"
-                    autoComplete="username"
-                    required
-                    minLength={2}
-                  />
-                )}
-                <input
-                  className="field"
-                  type="email"
-                  style={{ marginBottom: 8 }}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email"
-                  autoComplete="email"
-                  required
-                />
-                <PasswordField
-                  style={{ marginBottom: mode === "register" ? 8 : 10 }}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
-                  autoComplete={mode === "register" ? "new-password" : "current-password"}
-                />
-                {mode === "register" && (
-                  <PasswordField
-                    style={{ marginBottom: 10 }}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm password"
-                    autoComplete="new-password"
-                  />
-                )}
-                <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy}>
-                  {busy
-                    ? mode === "register"
-                      ? "Creating account…"
-                      : "Signing in…"
-                    : mode === "register"
-                      ? "Create account"
-                      : "Sign in with email"}
-                </button>
-              </form>
+              {notice}
             </div>
           )}
+
+          <div className="login-cta-stack">
+            {config?.google_client_id ? (
+              <div ref={googleBtn} className="google-btn-slot" />
+            ) : (
+              <p className="disclaimer">Google sign-in is not configured yet.</p>
+            )}
+
+            <div className={`email-auth-slot ${showEmail ? "open" : ""}`}>
+              {!showEmail ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost email-cta"
+                  onClick={() => openEmail("login")}
+                >
+                  Sign in with email
+                </button>
+              ) : (
+                <div className="email-auth-block">
+                  <div className="auth-tabs" role="tablist" aria-label="Account">
+                    <button
+                      type="button"
+                      className={`auth-tab ${mode === "login" ? "active" : ""}`}
+                      onClick={() => setMode("login")}
+                    >
+                      Sign in
+                    </button>
+                    <button
+                      type="button"
+                      className={`auth-tab ${mode === "register" ? "active" : ""}`}
+                      onClick={() => setMode("register")}
+                    >
+                      Join now
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSubmit} className="email-auth-form">
+                    <div
+                      className={`register-extra ${mode === "register" ? "show" : ""}`}
+                      aria-hidden={mode !== "register"}
+                    >
+                      <input
+                        className="field"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="Username"
+                        autoComplete="username"
+                        required={mode === "register"}
+                        minLength={2}
+                        tabIndex={mode === "register" ? 0 : -1}
+                      />
+                    </div>
+
+                    <input
+                      className="field"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Email"
+                      autoComplete="email"
+                      required
+                    />
+                    <PasswordField
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Password"
+                      autoComplete={mode === "register" ? "new-password" : "current-password"}
+                    />
+
+                    <div
+                      className={`register-extra ${mode === "register" ? "show" : ""}`}
+                      aria-hidden={mode !== "register"}
+                    >
+                      <PasswordField
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Confirm password"
+                        autoComplete="new-password"
+                      />
+                    </div>
+
+                    <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy}>
+                      {busy
+                        ? mode === "register"
+                          ? "Creating account…"
+                          : "Signing in…"
+                        : mode === "register"
+                          ? "Create account"
+                          : "Sign in with email"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="text-link back-link"
+                      onClick={() => {
+                        setShowEmail(false);
+                        setError(null);
+                      }}
+                    >
+                      ← Back to options
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="login-main-spacer" aria-hidden="true" />
         </div>
 
-        <p className="login-legal">
-          By continuing, you agree this tool provides informational guidance only — not legal advice.
-        </p>
-
-        {!showEmail && (
+        <footer className="login-panel-footer">
+          <p className="login-legal">
+            By continuing, you agree this tool provides informational guidance only — not legal advice.
+          </p>
           <p className="login-join">
-            New to ImmiAssist?{" "}
+            {showEmail
+              ? mode === "register"
+                ? "Already have an account?"
+                : "New to ImmiAssist?"
+              : "New to ImmiAssist?"}{" "}
             <button
               type="button"
               className="text-link"
               onClick={() => {
-                setShowEmail(true);
-                setMode("register");
+                if (!showEmail) openEmail("register");
+                else setMode(mode === "register" ? "login" : "register");
               }}
             >
-              Join now
+              {showEmail
+                ? mode === "register"
+                  ? "Sign in"
+                  : "Join now"
+                : "Join now"}
             </button>
           </p>
-        )}
+        </footer>
       </div>
 
       <JourneyVisual />

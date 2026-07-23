@@ -592,7 +592,7 @@ a {
 .login-landing {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(320px, 520px) 1fr;
+  grid-template-columns: minmax(340px, 42vw) 1fr;
   gap: 0;
 }
 
@@ -609,44 +609,94 @@ a {
 .login-panel {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: clamp(28px, 6vw, 64px);
-  max-width: 560px;
+  min-height: 100vh;
+  height: 100%;
+  padding: clamp(28px, 5vh, 48px) clamp(24px, 4vw, 56px) 28px;
   width: 100%;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.login-panel-header {
+  flex: 0 0 auto;
+}
+
+.login-panel-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 18px;
+  padding: clamp(20px, 3.5vh, 36px) 0 12px;
+  min-height: 0;
+}
+
+/* Absorbs unused height so Join now expands downward without shifting the hero. */
+.login-main-spacer {
+  flex: 1 1 auto;
+  min-height: 8px;
+}
+
+.login-panel-footer {
+  flex: 0 0 auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(11, 28, 40, 0.08);
 }
 
 .brand-mark-lg h1 {
   font-size: 1.45rem;
 }
 
+.login-copy {
+  /* Hold hero height so opening email/Join now does not pull CTAs upward. */
+  min-height: 11.5rem;
+}
+
 .login-hero-title {
-  margin: 28px 0 10px;
+  margin: 0 0 10px;
   font-family: var(--font-display);
-  font-size: clamp(2.2rem, 4vw, 3.1rem);
-  line-height: 1.05;
+  font-size: clamp(2rem, 3.6vw, 2.85rem);
+  line-height: 1.08;
   letter-spacing: -0.03em;
   color: var(--ink);
+  transition: font-size 180ms ease;
+}
+
+.login-landing.is-email-open .login-hero-title {
+  font-size: clamp(1.75rem, 2.8vw, 2.25rem);
 }
 
 .login-hero-sub {
-  margin: 0 0 22px;
+  margin: 0;
   color: var(--muted);
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   line-height: 1.55;
-  max-width: 38ch;
+  max-width: 40ch;
 }
 
 .login-cta-stack {
   display: grid;
   gap: 12px;
   max-width: 380px;
+  width: 100%;
+  flex: 0 0 auto;
 }
 
 .google-btn-slot {
   min-height: 44px;
   display: flex;
   justify-content: flex-start;
+}
+
+.email-auth-slot {
+  min-height: 52px;
+  transition: min-height 200ms ease;
+}
+
+/* Reserve the taller Join-now form height so Sign in ↔ Join now does not jump. */
+.email-auth-slot.open {
+  min-height: 360px;
 }
 
 .email-cta {
@@ -660,16 +710,54 @@ a {
 }
 
 .email-auth-block {
-  margin-top: 4px;
+  margin-top: 2px;
+  animation: auth-rise 220ms ease;
+}
+
+.email-auth-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  align-content: start;
+}
+
+.register-extra {
+  display: grid;
+  gap: 10px;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: opacity 160ms ease, grid-template-rows 200ms ease;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.register-extra.show {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.register-extra > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.back-link {
+  justify-self: start;
+  margin-top: 2px;
 }
 
 .login-legal,
 .login-join {
-  margin: 16px 0 0;
+  margin: 0;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.45;
   max-width: 42ch;
+}
+
+.login-join {
+  margin-top: 8px;
 }
 
 .text-link {
@@ -680,6 +768,17 @@ a {
   cursor: pointer;
   padding: 0;
   font: inherit;
+}
+
+@keyframes auth-rise {
+  from {
+    opacity: 0.4;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .login-visual {
