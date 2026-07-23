@@ -153,6 +153,12 @@ export async function deleteConversation(id) {
   return apiRequest(`/conversations/${id}`, { method: "DELETE" });
 }
 
+export async function truncateConversation(conversationId, messageId) {
+  return apiRequest(`/conversations/${conversationId}/messages/${messageId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function createChecklist(payload) {
   return apiRequest("/checklist", { method: "POST", body: JSON.stringify(payload) });
 }

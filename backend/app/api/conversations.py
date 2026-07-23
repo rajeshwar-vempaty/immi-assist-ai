@@ -48,3 +48,15 @@ def delete_conversation(
 ):
     convs.delete_conversation(db, user, conversation_id)
     return {"status": "deleted"}
+
+
+@router.delete("/{conversation_id}/messages/{message_id}")
+def truncate_messages(
+    conversation_id: str,
+    message_id: str,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a message and all messages after it (edit-and-rerun support)."""
+    convs.truncate_from_message(db, user, conversation_id, message_id)
+    return {"status": "truncated"}

@@ -14,6 +14,7 @@ import {
   getSettingsPreferences,
   listConversations,
   sendChatMessage,
+  truncateConversation,
 } from "../lib/api";
 
 const TABS = [
@@ -85,6 +86,9 @@ export default function Home() {
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
   const [draftReady, setDraftReady] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState(null);
+  const [editingIdx, setEditingIdx] = useState(null);
+  const [editText, setEditText] = useState("");
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
   const draftKey = "immi_draft_message";
@@ -207,7 +211,7 @@ export default function Home() {
     await signOut();
   };
 
-  const handleSend = async (messageText = null) => {
+  const handleSend = async (messageText = null, baseMessages = null) => {
     const text = messageText || input.trim();
     if (!text || chatLoading) return;
     if (!provider || !model) {
@@ -215,8 +219,9 @@ export default function Home() {
       return;
     }
     setError(null);
+    const base = baseMessages ?? messages;
     const userMessage = { role: "user", content: text };
-    const next = [...messages, userMessage];
+    const next = [...base, userMessage];
     setMessages(next);
     setInput("");
     sessionStorage.removeItem(draftKey);
@@ -225,7 +230,7 @@ export default function Home() {
     try {
       const response = await sendChatMessage({
         message: text,
-        chatHistory: messages,
+        chatHistory: base,
         conversationId: activeChatId,
         provider,
         model,
@@ -254,6 +259,63 @@ export default function Home() {
     } finally {
       setChatLoading(false);
     }
+  };
+
+  const copyMessage = async (content, idx) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = content;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx((v) => (v === idx ? null : v)), 1600);
+    } catch {
+      setError("Could not copy to clipboard.");
+    }
+  };
+
+  const startEdit = (idx) => {
+    if (chatLoading) return;
+    setEditingIdx(idx);
+    setEditText(messages[idx]?.content || "");
+  };
+
+  const cancelEdit = () => {
+    setEditingIdx(null);
+    setEditText("");
+  };
+
+  const saveEditAndRerun = async () => {
+    const idx = editingIdx;
+    const text = editText.trim();
+    if (idx === null || !text || chatLoading) return;
+    setEditingIdx(null);
+    setEditText("");
+    const base = messages.slice(0, idx);
+
+    if (activeChatId) {
+      try {
+        const detail = await getConversation(activeChatId);
+        const serverMsg = (detail.messages || [])[idx];
+        if (serverMsg && serverMsg.role === "user") {
+          await truncateConversation(activeChatId, serverMsg.id);
+        }
+      } catch (err) {
+        setError(err.message || "Could not rewind the conversation.");
+        return;
+      }
+    }
+
+    setMessages(base);
+    await handleSend(text, base);
   };
 
   const handleChecklist = async () => {
@@ -460,6 +522,7 @@ export default function Home() {
         </header>
 
         <main className={`content ${tab === "chat" ? "has-composer" : ""}`}>
+          <div className="content-inner">
           {error && (
             <div className="error-banner">
               <span>{error}</span>
@@ -495,20 +558,75 @@ export default function Home() {
               ) : (
                 <div className="messages">
                   {messages.map((msg, i) => (
-                    <div key={i} className={`bubble ${msg.role}`}>
-                      {msg.role === "assistant" ? (
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      ) : (
-                        msg.content
-                      )}
-                      {msg.meta?.sources?.length > 0 && (
-                        <div className="sources">
-                          {msg.meta.sources.slice(0, 4).map((s, j) => (
-                            <span key={j} className="source-chip">
-                              {s}
-                            </span>
-                          ))}
+                    <div key={i} className={`msg-block ${msg.role}`}>
+                      {editingIdx === i ? (
+                        <div className="bubble user msg-editing">
+                          <textarea
+                            className="msg-edit-area"
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                saveEditAndRerun();
+                              }
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                            rows={Math.min(8, Math.max(2, editText.split("\n").length))}
+                            autoFocus
+                          />
+                          <div className="msg-edit-actions">
+                            <button
+                              type="button"
+                              className="btn btn-primary compact-btn"
+                              onClick={saveEditAndRerun}
+                              disabled={!editText.trim() || chatLoading}
+                            >
+                              Save &amp; send
+                            </button>
+                            <button type="button" className="btn btn-ghost compact-btn" onClick={cancelEdit}>
+                              Cancel
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <>
+                          <div className={`bubble ${msg.role}`}>
+                            {msg.role === "assistant" ? (
+                              <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            ) : (
+                              msg.content
+                            )}
+                            {msg.meta?.sources?.length > 0 && (
+                              <div className="sources">
+                                {msg.meta.sources.slice(0, 4).map((s, j) => (
+                                  <span key={j} className="source-chip">
+                                    {s}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="msg-actions">
+                            <button
+                              type="button"
+                              className="msg-action"
+                              onClick={() => copyMessage(msg.content, i)}
+                            >
+                              {copiedIdx === i ? "Copied" : "Copy"}
+                            </button>
+                            {msg.role === "user" && (
+                              <button
+                                type="button"
+                                className="msg-action"
+                                onClick={() => startEdit(i)}
+                                disabled={chatLoading}
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   ))}
@@ -610,6 +728,7 @@ export default function Home() {
               )}
             </section>
           )}
+          </div>
         </main>
 
         {tab === "chat" && (

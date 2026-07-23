@@ -51,6 +51,24 @@ def delete_conversation(db: Session, user: User, conversation_id: str) -> None:
     db.commit()
 
 
+def truncate_from_message(db: Session, user: User, conversation_id: str, message_id: str) -> None:
+    """Delete a message and everything after it, so an edited message can be re-sent."""
+    conv = get_conversation(db, user, conversation_id)
+    ordered = (
+        db.query(Message)
+        .filter(Message.conversation_id == conv.id)
+        .order_by(Message.created_at.asc())
+        .all()
+    )
+    idx = next((i for i, m in enumerate(ordered) if m.id == message_id), None)
+    if idx is None:
+        raise AppError("Message not found.", status_code=404)
+    for msg in ordered[idx:]:
+        db.delete(msg)
+    conv.updated_at = datetime.utcnow()
+    db.commit()
+
+
 def conversation_detail(db: Session, user: User, conversation_id: str) -> dict:
     conv = get_conversation(db, user, conversation_id)
     return {

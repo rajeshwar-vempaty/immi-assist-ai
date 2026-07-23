@@ -55,7 +55,9 @@ a {
 .app-shell {
   display: grid;
   grid-template-columns: 280px 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 @media (max-width: 900px) {
@@ -80,6 +82,8 @@ a {
 .history-panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   border-right: 1px solid var(--line);
   background: rgba(244, 241, 235, 0.88);
   backdrop-filter: blur(10px);
@@ -368,7 +372,9 @@ a {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 100vh;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .topbar {
@@ -452,14 +458,20 @@ a {
 
 .content {
   flex: 1;
-  width: min(920px, 100%);
-  margin: 0 auto;
-  padding: 28px 20px 40px;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
   animation: riseIn 500ms ease both;
 }
 
-.content.has-composer {
-  padding-bottom: 120px;
+.content-inner {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  padding: 28px 20px 40px;
+}
+
+.content.has-composer .content-inner {
+  padding-bottom: 24px;
 }
 
 .hero-block {
@@ -519,7 +531,85 @@ a {
 .messages {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+}
+
+.msg-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.msg-block.user {
+  align-items: flex-end;
+}
+
+.msg-block.assistant {
+  align-items: flex-start;
+}
+
+.msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.msg-block:hover .msg-actions,
+.msg-block:focus-within .msg-actions {
+  opacity: 1;
+}
+
+.msg-action {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.msg-action:hover:not(:disabled) {
+  background: rgba(11, 28, 40, 0.06);
+  color: var(--ink);
+}
+
+.msg-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bubble.msg-editing {
+  width: min(780px, 92%);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(31, 111, 106, 0.4);
+  color: var(--text);
+}
+
+.msg-edit-area {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  resize: vertical;
+  font: inherit;
+  color: inherit;
+  line-height: 1.5;
+  outline: none;
+  min-height: 48px;
+}
+
+.msg-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn.compact-btn {
+  padding: 7px 14px;
+  font-size: 0.84rem;
 }
 
 .bubble {
@@ -563,18 +653,9 @@ a {
 }
 
 .composer {
-  position: fixed;
-  left: 280px;
-  right: 0;
-  bottom: 0;
-  padding: 16px 20px 22px;
+  flex-shrink: 0;
+  padding: 10px 20px 18px;
   background: linear-gradient(transparent, rgba(244, 241, 235, 0.96) 28%);
-}
-
-@media (max-width: 900px) {
-  .composer {
-    left: 0;
-  }
 }
 
 .composer-inner {
