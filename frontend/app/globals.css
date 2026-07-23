@@ -683,10 +683,53 @@ a {
   flex: 0 0 auto;
 }
 
+.google-btn-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  min-height: 44px;
+}
+
+.google-btn-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(11, 28, 40, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
 .google-btn-slot {
+  position: absolute;
+  inset: 0;
   min-height: 44px;
   display: flex;
-  justify-content: flex-start;
+  justify-content: stretch;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 12px;
+  /* Invisible overlay: our styled button stays visible; GIS captures clicks when ready. */
+  opacity: 0.02;
+}
+
+.google-btn-wrap:not(.is-ready) .google-btn-slot {
+  pointer-events: none;
+  opacity: 0;
+}
+
+.google-btn-slot > div,
+.google-btn-slot iframe {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
 }
 
 .email-auth-slot {
