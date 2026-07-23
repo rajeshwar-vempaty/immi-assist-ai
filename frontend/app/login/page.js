@@ -321,7 +321,7 @@ const JOURNEY_VISUALS = [
     status: "Pathway map",
     title: "See the route before you move.",
     items: ["Eligibility signals", "Wait-time ranges", "Next action only"],
-    chips: ["EB-2", "L-1A", "OPT"],
+    chips: ["L-1A", "OPT", "EB-2"],
   },
   {
     id: "horizon",
@@ -409,17 +409,23 @@ function JourneyVisualDossier({ visual }) {
 }
 
 function JourneyVisualRoute({ visual }) {
+  const [start, mid, end] = visual.chips;
   return (
     <div className="login-visual-scene visual-route">
       <svg className="route-path" viewBox="0 0 400 420" fill="none" aria-hidden="true">
         <path
           className="route-line"
-          d="M48 340 C 90 250, 120 220, 170 200 S 280 150, 320 80"
+          d="M42 318 C 58 230, 88 145, 168 98 S 275 68, 348 88"
         />
-        <circle className="route-node route-node-start" cx="48" cy="340" r="7" />
-        <circle className="route-node route-node-mid" cx="170" cy="200" r="7" />
-        <circle className="route-node route-node-end" cx="320" cy="80" r="7" />
+        <circle className="route-node route-node-start" cx="42" cy="318" r="8" />
+        <circle className="route-node route-node-mid" cx="168" cy="98" r="8" />
+        <circle className="route-node route-node-end" cx="348" cy="88" r="8" />
       </svg>
+
+      <div className="route-chip route-chip-start">{start}</div>
+      <div className="route-chip route-chip-mid">{mid}</div>
+      <div className="route-chip route-chip-end">{end}</div>
+
       <div className="route-card">
         <div className="passport-stamp">Be</div>
         <p>{visual.status}</p>
@@ -430,11 +436,6 @@ function JourneyVisualRoute({ visual }) {
           ))}
         </ul>
       </div>
-      {visual.chips.map((chip, i) => (
-        <div key={chip} className={`float-chip chip-r${i + 1}`}>
-          {chip}
-        </div>
-      ))}
     </div>
   );
 }

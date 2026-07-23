@@ -1212,24 +1212,26 @@ a {
   }
 
 /* Route / pathway map */
-.route-path {
+.visual-route .route-path {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .route-line {
   fill: none;
-  stroke: rgba(11, 28, 40, 0.18);
-  stroke-width: 2;
-  stroke-dasharray: 6 8;
-  
+  stroke: rgba(11, 28, 40, 0.22);
+  stroke-width: 2.25;
+  stroke-dasharray: 7 9;
+  stroke-linecap: round;
 }
 
 .route-node {
-  stroke: rgba(255, 255, 255, 0.9);
-  stroke-width: 2;
+  stroke: #fff;
+  stroke-width: 2.5;
 }
 
 .route-node-start {
@@ -1246,27 +1248,56 @@ a {
 
 .route-card {
   position: absolute;
-  left: 10%;
-  right: 22%;
-  bottom: 10%;
+  left: 22%;
+  right: 8%;
+  top: 40%;
+  bottom: 8%;
   border-radius: 22px;
   padding: 24px 26px;
-  }
+  z-index: 2;
+}
 
-.chip-r1 {
-  top: 12%;
-  right: 10%;
-  }
+.route-chip {
+  position: absolute;
+  z-index: 3;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(11, 28, 40, 0.1);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  box-shadow: 0 8px 20px rgba(11, 28, 40, 0.06);
+  white-space: nowrap;
+}
 
-.chip-r2 {
-  top: 38%;
-  left: 8%;
-  }
+/* Anchored near SVG nodes — kept clear of the card */
+.route-chip-start {
+  left: 2%;
+  top: 74%;
+}
 
-.chip-r3 {
-  top: 18%;
-  left: 28%;
-  }
+.route-chip-mid {
+  left: 30%;
+  top: 8%;
+}
+
+.route-chip-end {
+  right: 4%;
+  top: 8%;
+}
+
+.login-visual.is-animated .route-chip-start {
+  animation: floaty 6.5s ease-in-out infinite;
+}
+
+.login-visual.is-animated .route-chip-mid {
+  animation: floaty 7.5s ease-in-out infinite 0.35s;
+}
+
+.login-visual.is-animated .route-chip-end {
+  animation: floaty 8s ease-in-out infinite 0.7s;
+}
 
 /* Horizon */
 .horizon-glow {
@@ -1330,21 +1361,18 @@ a {
 
 .login-visual.is-animated .chip-t1,
 .login-visual.is-animated .chip-d1,
-.login-visual.is-animated .chip-r1,
 .login-visual.is-animated .chip-h1 {
   animation: floaty 6s ease-in-out infinite;
 }
 
 .login-visual.is-animated .chip-t2,
 .login-visual.is-animated .chip-d2,
-.login-visual.is-animated .chip-r2,
 .login-visual.is-animated .chip-h2 {
   animation: floaty 7s ease-in-out infinite 0.35s;
 }
 
 .login-visual.is-animated .chip-t3,
 .login-visual.is-animated .chip-d3,
-.login-visual.is-animated .chip-r3,
 .login-visual.is-animated .chip-h3 {
   animation: floaty 8s ease-in-out infinite 0.7s;
 }
