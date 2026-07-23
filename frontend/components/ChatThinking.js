@@ -46,6 +46,34 @@ function ThinkingIcon({ name }) {
           <path d="m14.8 9.2-1.7 5.1-5.1 1.7 1.7-5.1 5.1-1.7Z" stroke="currentColor" strokeWidth="1.5" fill="rgba(31,111,106,0.2)" />
         </svg>
       );
+    case "bag":
+      return (
+        <svg {...common}>
+          <path d="M6 8h12l-1 12H7L6 8Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+          <path d="M9 8V6.5A3 3 0 0 1 12 3.5 3 3 0 0 1 15 6.5V8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      );
+    case "mug":
+      return (
+        <svg {...common}>
+          <path d="M6 7h10v8a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V7Z" stroke="currentColor" strokeWidth="1.7" />
+          <path d="M16 9h2.5a2.5 2.5 0 0 1 0 5H16" stroke="currentColor" strokeWidth="1.7" />
+          <path d="M8 4c.6.8.6 1.7 0 2.5M11 4c.6.8.6 1.7 0 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
+    case "map":
+      return (
+        <svg {...common}>
+          <path d="m3 7 6-2 6 2 6-2v14l-6 2-6-2-6 2V7Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+          <path d="M9 5v14M15 7v14" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      );
+    case "clip":
+      return (
+        <svg {...common}>
+          <path d="M15.5 7.5 9 14a2.5 2.5 0 1 0 3.5 3.5l7-7a4 4 0 0 0-5.7-5.7l-7.5 7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
     case "plane":
       return (
         <svg {...common}>
