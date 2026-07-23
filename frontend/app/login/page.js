@@ -81,6 +81,74 @@ function PasswordField({ value, onChange, placeholder, autoComplete }) {
   );
 }
 
+const LOGIN_HERO_COPY = [
+  {
+    id: "ask-clearly",
+    title: "Ask clearly. File calmly.",
+    subtitle:
+      "Grounded answers on visas, documents, timelines, and RFEs — so you can take the next step with less guesswork.",
+  },
+  {
+    id: "next-step",
+    title: "One clear next step.",
+    subtitle:
+      "Cut through immigration noise with practical guidance on forms, evidence, and what usually comes next.",
+  },
+  {
+    id: "less-guesswork",
+    title: "Less guesswork. More clarity.",
+    subtitle:
+      "Understand pathways, checklists, and timelines in plain language — then move forward with confidence.",
+  },
+  {
+    id: "ready-to-file",
+    title: "Know before you file.",
+    subtitle:
+      "Get oriented on visa options, document readiness, and RFE risks before the paperwork piles up.",
+  },
+  {
+    id: "steady-guidance",
+    title: "Steady guidance for big moves.",
+    subtitle:
+      "From first questions to filing prep — clear answers when the stakes feel high and the forms feel endless.",
+  },
+  {
+    id: "path-forward",
+    title: "Find your path forward.",
+    subtitle:
+      "Explore eligibility signals, wait-time ranges, and document checklists without drowning in jargon.",
+  },
+];
+
+function pickPerVisit(items, { lastKey, onceKey, forcedId } = {}) {
+  if (!items?.length) return null;
+  if (forcedId) {
+    return items.find((item) => item.id === forcedId) || items[0];
+  }
+
+  const loadId = String(performance.timeOrigin);
+  try {
+    const raw = sessionStorage.getItem(onceKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.loadId === loadId && parsed?.id) {
+        const found = items.find((item) => item.id === parsed.id);
+        if (found) return found;
+      }
+    }
+
+    const lastId = sessionStorage.getItem(lastKey);
+    const pool = items.filter((item) => item.id !== lastId);
+    const choices = pool.length ? pool : items;
+    const next = choices[Math.floor(Math.random() * choices.length)];
+    sessionStorage.setItem(onceKey, JSON.stringify({ id: next.id, loadId }));
+    sessionStorage.setItem(lastKey, next.id);
+    return next;
+  } catch {
+    return items[Math.floor(Math.random() * items.length)];
+  }
+}
+
 const JOURNEY_VISUALS = [
   {
     id: "orbit",
@@ -263,42 +331,13 @@ function JourneyVisual() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const forced = params.get("visual");
-    if (forced) {
-      const match = JOURNEY_VISUALS.find((v) => v.id === forced);
-      if (match) {
-        setVisual(match);
-        return;
-      }
-    }
-
-    const lastKey = "immi_login_visual_id";
-    const onceKey = "immi_login_visual_once";
-    const loadId = String(performance.timeOrigin);
-
-    try {
-      const raw = sessionStorage.getItem(onceKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.loadId === loadId && parsed?.id) {
-          const found = JOURNEY_VISUALS.find((v) => v.id === parsed.id);
-          if (found) {
-            setVisual(found);
-            return;
-          }
-        }
-      }
-
-      const lastId = sessionStorage.getItem(lastKey);
-      const pool = JOURNEY_VISUALS.filter((v) => v.id !== lastId);
-      const choices = pool.length ? pool : JOURNEY_VISUALS;
-      const next = choices[Math.floor(Math.random() * choices.length)];
-      sessionStorage.setItem(onceKey, JSON.stringify({ id: next.id, loadId }));
-      sessionStorage.setItem(lastKey, next.id);
-      setVisual(next);
-    } catch {
-      setVisual(JOURNEY_VISUALS[Math.floor(Math.random() * JOURNEY_VISUALS.length)]);
-    }
+    setVisual(
+      pickPerVisit(JOURNEY_VISUALS, {
+        lastKey: "immi_login_visual_id",
+        onceKey: "immi_login_visual_once",
+        forcedId: params.get("visual"),
+      })
+    );
   }, []);
 
   if (!visual) {
@@ -327,12 +366,24 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [heroCopy, setHeroCopy] = useState(LOGIN_HERO_COPY[0]);
   const googleBtn = useRef(null);
 
   useEffect(() => {
     getAuthConfig()
       .then(setConfig)
       .catch(() => setConfig({ google_client_id: null, password_auth_enabled: true }));
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setHeroCopy(
+      pickPerVisit(LOGIN_HERO_COPY, {
+        lastKey: "immi_login_hero_id",
+        onceKey: "immi_login_hero_once",
+        forcedId: params.get("hero"),
+      })
+    );
   }, []);
 
   useEffect(() => {
@@ -437,13 +488,13 @@ export default function LoginPage() {
     ? mode === "register"
       ? "Create your account"
       : "Welcome back"
-    : "Ask clearly. File calmly.";
+    : heroCopy.title;
 
   const subtitle = showEmail
     ? mode === "register"
       ? "Join with email to keep chat history and API keys private to your account."
       : "Sign in with email, or keep using Google above."
-    : "Grounded answers on visas, documents, timelines, and RFEs — so you can take the next step with less guesswork.";
+    : heroCopy.subtitle;
 
   return (
     <div className={`login-landing ${showEmail ? "is-email-open" : ""}`}>
