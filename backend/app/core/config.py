@@ -2,9 +2,12 @@
 Core configuration — loads environment variables and manages app settings.
 """
 
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
+
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -31,7 +34,7 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./immi_assist.db"
 
-    # Vector Store
+    # Vector Store — relative paths resolve against backend/
     chroma_persist_dir: str = "./data/chroma_db"
     pinecone_api_key: Optional[str] = None
     pinecone_index: Optional[str] = None
@@ -82,6 +85,13 @@ class Settings(BaseSettings):
                 ]
             )
         return list(dict.fromkeys(origins))
+
+    @property
+    def resolved_chroma_dir(self) -> str:
+        path = Path(self.chroma_persist_dir)
+        if not path.is_absolute():
+            path = _BACKEND_ROOT / path
+        return str(path.resolve())
 
     class Config:
         env_file = ".env"

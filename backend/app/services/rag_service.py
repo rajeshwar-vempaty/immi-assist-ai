@@ -32,7 +32,7 @@ class RAGService:
 
     def _init_chroma(self):
         """Initialize ChromaDB client and collection."""
-        persist_dir = Path(self.settings.chroma_persist_dir)
+        persist_dir = Path(self.settings.resolved_chroma_dir)
         persist_dir.mkdir(parents=True, exist_ok=True)
 
         self.chroma_client = chromadb.PersistentClient(

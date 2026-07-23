@@ -16,11 +16,82 @@ from app.core.prompts import (
 )
 from app.models.models import ChatMessage, ChatSession
 from app.schemas.schemas import ChatRequest, ChatResponse
+from app.services.llm_json_service import extract_json
 from app.services.rag_service import get_rag_service
 from app.utils.citations import format_citations
 from app.utils.disclaimer import inject_disclaimer, check_confidence, CASE_SPECIFIC_REDIRECT
 
 logger = logging.getLogger(__name__)
+
+
+def _format_timeline_text(data: dict) -> str:
+    """Turn timeline JSON into readable chat text."""
+    proc = data.get("current_processing_range") or data.get("processing_range_months") or {}
+    min_m = proc.get("min_months", proc.get("min", "?"))
+    max_m = proc.get("max_months", proc.get("max", "?"))
+    completion = data.get("estimated_completion") or {}
+    options = data.get("options_if_delayed") or []
+    tips = data.get("tips") or []
+
+    lines = [
+        f"**{data.get('form_type', 'Form')} processing timeline**",
+        "",
+        f"- **Service center:** {data.get('service_center') or 'Not specified'}",
+        f"- **Typical range:** {min_m}–{max_m} months",
+        f"- **Case status:** {data.get('case_status', 'UNKNOWN')}",
+    ]
+    if completion:
+        lines.append(
+            f"- **Estimated completion:** {completion.get('earliest', '?')} to {completion.get('latest', '?')}"
+        )
+    if data.get("status_explanation"):
+        lines.extend(["", data["status_explanation"]])
+    if options:
+        lines.extend(["", "**If delayed:**"])
+        lines.extend([f"- {o}" for o in options])
+    if tips:
+        lines.extend(["", "**Tips:**"])
+        lines.extend([f"- {t}" for t in tips])
+    if data.get("data_as_of"):
+        lines.extend(["", f"_Data as of: {data['data_as_of']}_"])
+    return "\n".join(lines)
+
+
+def _format_checklist_text(data: dict) -> str:
+    """Turn checklist JSON into readable chat text."""
+    lines = [
+        f"**Document checklist: {data.get('visa_type', 'Visa')}**",
+        f"Primary form: {data.get('form_number', 'N/A')}",
+        f"Filing fee: {data.get('filing_fee', 'See USCIS')}",
+        f"Estimated prep time: {data.get('estimated_prep_time', 'N/A')}",
+        "",
+    ]
+    for cat in data.get("checklist") or []:
+        lines.append(f"### {cat.get('category', 'Documents')}")
+        for item in cat.get("items") or []:
+            mark = "Required" if item.get("required", True) else "Optional"
+            lines.append(f"- **{item.get('document', 'Document')}** ({mark}): {item.get('description', '')}")
+            if item.get("tips"):
+                lines.append(f"  - Tip: {item['tips']}")
+        lines.append("")
+    mistakes = data.get("common_mistakes") or []
+    if mistakes:
+        lines.append("**Common mistakes:**")
+        lines.extend([f"- {m}" for m in mistakes])
+    return "\n".join(lines)
+
+
+def _humanize_structured_response(intent: Intent, content: str) -> str:
+    """If the LLM returned JSON for checklist/timeline, format it for chat."""
+    if intent not in (Intent.TIMELINE, Intent.CHECKLIST):
+        return content
+    try:
+        data = extract_json(content)
+    except Exception:
+        return content
+    if intent == Intent.TIMELINE:
+        return _format_timeline_text(data)
+    return _format_checklist_text(data)
 
 
 class ChatService:
@@ -122,7 +193,7 @@ class ChatService:
             )
         elif classified.intent == Intent.TIMELINE:
             system_prompt = TIMELINE_PROMPT.format(
-                form_type=classified.sub_topic or request.message,
+                form_type=classified.visa_type or classified.sub_topic or request.message,
                 service_center="Unknown",
                 filing_date="Not provided",
                 category=classified.visa_type or "General",
@@ -142,7 +213,9 @@ class ChatService:
             intent=classified.intent,
         )
 
-        response_text = llm_response.content
+        response_text = _humanize_structured_response(
+            classified.intent, llm_response.content
+        )
         confidence_warning = check_confidence(classified.confidence)
         if confidence_warning:
             response_text = confidence_warning + "\n\n" + response_text
