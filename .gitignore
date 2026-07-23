@@ -16,6 +16,7 @@ out/
 .env.production
 
 # Data
+data/
 backend/data/chroma_db/
 backend/data/raw/
 
