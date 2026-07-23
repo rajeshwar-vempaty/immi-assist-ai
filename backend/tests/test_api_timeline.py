@@ -6,7 +6,8 @@ from app.schemas.schemas import TimelineResponse
 
 
 @patch("app.api.timeline.TimelineService")
-def test_timeline_endpoint(MockService, client):
+def test_timeline_endpoint(MockService, client, auth_login):
+    headers, _ = auth_login("timeline@example.com")
     mock_instance = MockService.return_value
     mock_instance.estimate = AsyncMock(
         return_value=TimelineResponse(
@@ -23,8 +24,8 @@ def test_timeline_endpoint(MockService, client):
 
     response = client.post(
         "/api/v1/timeline",
+        headers=headers,
         json={"form_type": "I-129", "service_center": "California Service Center"},
-        headers={"X-Session-ID": "timeline-test-session"},
     )
     assert response.status_code == 200
     data = response.json()

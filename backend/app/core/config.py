@@ -20,7 +20,20 @@ class Settings(BaseSettings):
     secret_key: str = "change-this-in-production"
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
-    # LLM API Keys
+    # Encryption for provider API keys at rest
+    encryption_key: Optional[str] = None
+
+    # JWT session
+    jwt_algorithm: str = "HS256"
+    jwt_expire_hours: int = 168
+    session_cookie_name: str = "immi_session"
+
+    # Google OAuth (Identity Services client ID)
+    google_client_id: str = ""
+    # Dev-only: allow email/name login without Google token
+    auth_dev_mode: bool = False
+
+    # Platform/fallback LLM API Keys (embeddings / optional system fallback)
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     google_api_key: str = ""

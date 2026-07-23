@@ -1,4 +1,5 @@
 import "./globals.css";
+import { AuthProvider } from "../lib/auth";
 
 export const metadata = {
   title: "ImmiAssist AI — Immigration Assistant",
@@ -16,8 +17,11 @@ export default function RootLayout({ children }) {
           href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap"
           rel="stylesheet"
         />
+        <script src="https://accounts.google.com/gsi/client" async defer />
       </head>
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

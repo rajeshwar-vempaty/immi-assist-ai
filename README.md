@@ -113,11 +113,23 @@ immi-assist-ai/
 ```
 
 ## 🔑 Features
-- **Immigration Q&A** — `POST /api/v1/chat` with RAG and multi-LLM routing
+- **Google sign-in** — dedicated `/login` page, JWT session cookie, protected routes
+- **User chat history** — conversations scoped by user ID; cleared from UI on logout (kept in DB)
+- **BYOK provider keys** — encrypted OpenAI / Anthropic / Gemini / Groq keys per user (see [docs/AUTH.md](docs/AUTH.md))
+- **Immigration Q&A** — `POST /api/v1/chat` with RAG and user-selected provider/model
 - **Document Checklist** — `POST /api/v1/checklist` structured JSON checklists
 - **Timeline Estimator** — `POST /api/v1/timeline` processing time estimates
 - **RFE Response Helper** — `POST /api/v1/rfe/analyze` structured RFE analysis
-- **SQLite persistence** — chat history, usage metering, API keys
+- **SQLite persistence** — users, conversations, encrypted credentials, usage metering
+
+## Authentication
+
+See **[docs/AUTH.md](docs/AUTH.md)** for Google OAuth setup, `AUTH_DEV_MODE`, encryption keys, and security notes.
+
+```bash
+# Local quick start without Google
+echo "AUTH_DEV_MODE=true" >> .env
+```
 - **Rate limiting** — free tier (anonymous) and starter tier (API key)
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production deployment.

@@ -6,7 +6,8 @@ from app.schemas.schemas import RFEAnalysis
 
 
 @patch("app.api.rfe.RFEService")
-def test_rfe_endpoint(MockService, client):
+def test_rfe_endpoint(MockService, client, auth_login):
+    headers, _ = auth_login("rfe@example.com")
     mock_instance = MockService.return_value
     mock_instance.analyze = AsyncMock(
         return_value=RFEAnalysis(
@@ -22,8 +23,8 @@ def test_rfe_endpoint(MockService, client):
 
     response = client.post(
         "/api/v1/rfe/analyze",
+        headers=headers,
         json={"rfe_text": "Please provide evidence that the position qualifies as a specialty occupation."},
-        headers={"X-Session-ID": "rfe-test-session"},
     )
     assert response.status_code == 200
     data = response.json()
