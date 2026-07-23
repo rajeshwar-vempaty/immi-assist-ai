@@ -43,7 +43,7 @@ function ThinkingIcon({ name }) {
       return (
         <svg {...common}>
           <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.7" />
-          <path d="m10 14 4-6  -4 6 6-4-6 4Z" fill="currentColor" />
+          <path d="m14.8 9.2-1.7 5.1-5.1 1.7 1.7-5.1 5.1-1.7Z" stroke="currentColor" strokeWidth="1.5" fill="rgba(31,111,106,0.2)" />
         </svg>
       );
     case "plane":
