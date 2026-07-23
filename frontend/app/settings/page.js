@@ -23,8 +23,6 @@ export default function SettingsPage() {
   const { user, loading, signOut } = useAuth();
   const [prefs, setPrefs] = useState(null);
   const [credentials, setCredentials] = useState([]);
-  const [draftKeys, setDraftKeys] = useState({});
-  const [status, setStatus] = useState({});
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -83,59 +81,6 @@ export default function SettingsPage() {
       </div>
     );
   }
-
-  const onSave = async (provider) => {
-    const key = draftKeys[provider];
-    if (!key) {
-      setStatus((s) => ({ ...s, [provider]: "Enter a key to save." }));
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await saveCredential(provider, key);
-      setStatus((s) => ({
-        ...s,
-        [provider]: result.is_valid ? "Saved and validated." : "Saved, but validation failed.",
-      }));
-      setDraftKeys((d) => ({ ...d, [provider]: "" }));
-      await load();
-    } catch (err) {
-      setStatus((s) => ({ ...s, [provider]: err.message }));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onTest = async (provider) => {
-    setBusy(true);
-    try {
-      const key = draftKeys[provider] || null;
-      const result = await testCredential(provider, key);
-      setStatus((s) => ({
-        ...s,
-        [provider]: result.is_valid ? "Key is valid." : "Key is invalid.",
-      }));
-      await load();
-    } catch (err) {
-      setStatus((s) => ({ ...s, [provider]: err.message }));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onDelete = async (provider) => {
-    if (!confirm(`Remove saved ${provider} API key?`)) return;
-    setBusy(true);
-    try {
-      await deleteCredential(provider);
-      setStatus((s) => ({ ...s, [provider]: "Removed." }));
-      await load();
-    } catch (err) {
-      setStatus((s) => ({ ...s, [provider]: err.message }));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const onPrefs = async (patch) => {
     setBusy(true);
@@ -255,65 +200,312 @@ export default function SettingsPage() {
             <span className="settings-note">Encrypted on the server. Full keys never leave storage.</span>
           </div>
 
-          <div className="key-list">
-            {(prefs?.catalog || []).map((provider) => {
-              const saved = byProvider[provider.id];
-              return (
-                <div key={provider.id} className="key-row">
-                  <div className="key-row-meta">
-                    <strong>{provider.label}</strong>
-                    <span className={`pill ${saved ? (saved.is_valid ? "ok" : "warn") : "muted"}`}>
-                      {saved
-                        ? saved.is_valid
-                          ? saved.masked_key
-                          : `${saved.masked_key} · invalid`
-                        : "Not set"}
-                    </span>
-                  </div>
-                  <div className="key-row-controls">
-                    <input
-                      className="field"
-                      type="password"
-                      placeholder={saved ? "Replace key…" : "Paste API key"}
-                      value={draftKeys[provider.id] || ""}
-                      onChange={(e) =>
-                        setDraftKeys((d) => ({ ...d, [provider.id]: e.target.value }))
-                      }
-                      autoComplete="off"
-                    />
-                    <div className="key-row-actions">
-                      <button
-                        className="btn btn-primary"
-                        disabled={busy}
-                        onClick={() => onSave(provider.id)}
-                      >
-                        Save
-                      </button>
-                      <button
-                        className="btn btn-ghost"
-                        disabled={busy}
-                        onClick={() => onTest(provider.id)}
-                      >
-                        Test
-                      </button>
-                      {saved && (
-                        <button
-                          className="btn btn-ghost"
-                          disabled={busy}
-                          onClick={() => onDelete(provider.id)}
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {status[provider.id] ? <p className="key-row-status">{status[provider.id]}</p> : null}
-                </div>
-              );
-            })}
-          </div>
+          <ApiKeyWizard
+            catalog={prefs?.catalog || []}
+            byProvider={byProvider}
+            busy={busy}
+            onReload={load}
+            setBusy={setBusy}
+            setError={setError}
+          />
         </section>
       </main>
+    </div>
+  );
+}
+
+function ApiKeyWizard({ catalog, byProvider, busy, onReload, setBusy, setError }) {
+  const firstConfigured = catalog.find((p) => byProvider[p.id])?.id || catalog[0]?.id || "";
+  const [provider, setProvider] = useState(firstConfigured);
+  const [apiKey, setApiKey] = useState("");
+  const [replacing, setReplacing] = useState(false);
+  const [phase, setPhase] = useState("idle"); // idle | saving | testing | done | error
+  const [failedAt, setFailedAt] = useState(0); // 0 = save, 1 = test
+  const [localMsg, setLocalMsg] = useState("");
+
+  useEffect(() => {
+    if (!provider && catalog[0]?.id) setProvider(catalog[0].id);
+  }, [catalog, provider]);
+
+  const selected = catalog.find((p) => p.id === provider) || catalog[0];
+  const saved = selected ? byProvider[selected.id] : null;
+  const running = phase === "saving" || phase === "testing";
+  const showProgress = running || phase === "done" || phase === "error";
+
+  const steps = [
+    { id: "save", label: "Save" },
+    { id: "test", label: "Test" },
+    { id: "auth", label: "Ready" },
+  ];
+
+  function progressWidth() {
+    if (phase === "done") return "100%";
+    if (phase === "saving") return "33%";
+    if (phase === "testing") return "66%";
+    if (phase === "error") return failedAt === 0 ? "33%" : "66%";
+    return "0%";
+  }
+
+  function stepState(idx) {
+    if (phase === "done") return "done";
+    if (phase === "saving") return idx === 0 ? "active" : "todo";
+    if (phase === "testing") {
+      if (idx === 0) return "done";
+      if (idx === 1) return "active";
+      return "todo";
+    }
+    if (phase === "error") {
+      if (idx < failedAt) return "done";
+      if (idx === failedAt) return "error";
+      return "todo";
+    }
+    return "todo";
+  }
+
+  function selectProvider(id) {
+    if (running || busy) return;
+    setProvider(id);
+    setApiKey("");
+    setReplacing(false);
+    setPhase("idle");
+    setFailedAt(0);
+    setLocalMsg("");
+  }
+
+  async function runAuthenticate() {
+    const key = apiKey.trim();
+    if (!key) {
+      setLocalMsg("Paste an API key first.");
+      setPhase("error");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setLocalMsg("");
+    setFailedAt(0);
+    setPhase("saving");
+    let at = 0;
+    try {
+      await saveCredential(provider, key);
+      at = 1;
+      setPhase("testing");
+      const result = await testCredential(provider);
+      if (!result.is_valid) {
+        setFailedAt(1);
+        setPhase("error");
+        setLocalMsg("Saved, but authentication failed. Check the key and try again.");
+        await onReload();
+        return;
+      }
+      setPhase("done");
+      setApiKey("");
+      setReplacing(false);
+      setLocalMsg("Key saved and authenticated.");
+      await onReload();
+    } catch (err) {
+      setFailedAt(at);
+      setPhase("error");
+      setLocalMsg(err.message || "Could not save or authenticate this key.");
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runTestOnly() {
+    setBusy(true);
+    setError(null);
+    setLocalMsg("");
+    setFailedAt(1);
+    setPhase("testing");
+    try {
+      const result = await testCredential(provider);
+      if (!result.is_valid) {
+        setPhase("error");
+        setLocalMsg("Authentication failed. Replace the key and try again.");
+        return;
+      }
+      setPhase("done");
+      setLocalMsg("Key authenticated successfully.");
+    } catch (err) {
+      setPhase("error");
+      setLocalMsg(err.message || "Test failed");
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runRemove() {
+    if (!confirm(`Remove saved ${selected?.label || provider} API key?`)) return;
+    setBusy(true);
+    setError(null);
+    setLocalMsg("");
+    try {
+      await deleteCredential(provider);
+      setReplacing(false);
+      setApiKey("");
+      setPhase("idle");
+      setLocalMsg("");
+      await onReload();
+    } catch (err) {
+      setPhase("error");
+      setLocalMsg(err.message || "Remove failed");
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!catalog.length) {
+    return <p className="muted">No providers available.</p>;
+  }
+
+  return (
+    <div className="api-wizard">
+      <div className="api-wizard-providers" role="listbox" aria-label="Choose a provider">
+        {catalog.map((p) => {
+          const hasKey = Boolean(byProvider[p.id]);
+          const isSelected = provider === p.id;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              role="option"
+              aria-selected={isSelected}
+              className={`api-wizard-provider${isSelected ? " selected" : ""}${hasKey ? " has-key" : ""}`}
+              onClick={() => selectProvider(p.id)}
+              disabled={running}
+            >
+              <span className="api-wizard-provider-name">{p.label}</span>
+              <span className={`api-wizard-provider-state${hasKey ? " ok" : ""}`}>
+                {hasKey ? "Configured" : "Not set"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="api-wizard-panel">
+        {saved && !replacing ? (
+          <div className="api-wizard-status-row">
+            <div>
+              <p className="api-wizard-status-label">Current key</p>
+              <p className="api-wizard-status-value">
+                <span className={`pill ${saved.is_valid ? "ok" : "warn"}`}>
+                  {saved.is_valid ? saved.masked_key : `${saved.masked_key} · invalid`}
+                </span>
+                <span className="api-wizard-status-hint">Encrypted on the server</span>
+              </p>
+            </div>
+            <div className="api-wizard-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setReplacing(true);
+                  setPhase("idle");
+                  setLocalMsg("");
+                  setApiKey("");
+                }}
+                disabled={busy || running}
+              >
+                Replace
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={runTestOnly}
+                disabled={busy || running}
+              >
+                Test
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={runRemove}
+                disabled={busy || running}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <label className="settings-field api-wizard-key-field">
+              <span>
+                {saved
+                  ? `Replace ${selected?.label} key`
+                  : `Paste ${selected?.label} API key`}
+              </span>
+              <input
+                className="field"
+                type="password"
+                autoComplete="off"
+                placeholder="Paste API key"
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  if (phase === "error" || phase === "done") setPhase("idle");
+                  setLocalMsg("");
+                }}
+                disabled={busy || running}
+              />
+            </label>
+            <div className="api-wizard-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={runAuthenticate}
+                disabled={busy || running || !apiKey.trim()}
+              >
+                {running ? "Working…" : "Save & authenticate"}
+              </button>
+              {saved ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setReplacing(false);
+                    setApiKey("");
+                    setPhase("idle");
+                    setLocalMsg("");
+                  }}
+                  disabled={busy || running}
+                >
+                  Cancel
+                </button>
+              ) : null}
+            </div>
+          </>
+        )}
+
+        {showProgress ? (
+          <div className="api-wizard-progress" aria-live="polite">
+            <div className="api-wizard-steps">
+              {steps.map((step, idx) => (
+                <div key={step.id} className={`api-wizard-step ${stepState(idx)}`}>
+                  <span className="api-wizard-step-dot" aria-hidden="true" />
+                  <span className="api-wizard-step-label">{step.label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="api-wizard-track" aria-hidden="true">
+              <div
+                className={`api-wizard-track-fill${phase === "error" ? " error" : ""}${phase === "done" ? " done" : ""}`}
+                style={{ width: progressWidth() }}
+              />
+            </div>
+            {localMsg ? (
+              <p className={`api-wizard-msg${phase === "error" ? " error" : ""}`}>{localMsg}</p>
+            ) : running ? (
+              <p className="api-wizard-msg">
+                {phase === "saving" ? "Saving encrypted key…" : "Testing authentication…"}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
