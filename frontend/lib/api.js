@@ -82,6 +82,24 @@ export async function loginDev(email, name) {
   return data;
 }
 
+export async function registerAccount({ username, email, password }) {
+  const data = await apiRequest("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, email, password }),
+  });
+  setAccessToken(data.access_token);
+  return data;
+}
+
+export async function loginWithPassword({ email, password }) {
+  const data = await apiRequest("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  setAccessToken(data.access_token);
+  return data;
+}
+
 export async function logout() {
   try {
     await apiRequest("/auth/logout", { method: "POST" });

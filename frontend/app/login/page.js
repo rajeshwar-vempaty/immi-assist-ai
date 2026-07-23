@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getAuthConfig, loginDev, loginWithGoogle } from "../../lib/api";
+import {
+  getAuthConfig,
+  loginWithGoogle,
+  loginWithPassword,
+  registerAccount,
+} from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 
 function waitForGoogle(timeoutMs = 8000) {
@@ -29,15 +34,19 @@ export default function LoginPage() {
   const router = useRouter();
   const [config, setConfig] = useState(null);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [devEmail, setDevEmail] = useState("demo@immiassist.local");
-  const [devName, setDevName] = useState("Demo User");
+  const [mode, setMode] = useState("login"); // login | register
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const googleBtn = useRef(null);
 
   useEffect(() => {
     getAuthConfig()
       .then(setConfig)
-      .catch(() => setConfig({ google_client_id: null, auth_dev_mode: true }));
+      .catch(() => setConfig({ google_client_id: null, password_auth_enabled: true }));
   }, []);
 
   useEffect(() => {
@@ -87,17 +96,38 @@ export default function LoginPage() {
     };
   }, [config, router, setUser, refresh]);
 
-  const handleDevLogin = async (e) => {
+  const finishAuth = async (data) => {
+    setUser(data.user);
+    await refresh();
+    router.replace("/");
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      const data = await loginDev(devEmail, devName);
-      setUser(data.user);
-      await refresh();
-      router.replace("/");
+      if (mode === "register") {
+        if (password !== confirmPassword) {
+          setError("Passwords do not match.");
+          return;
+        }
+        const data = await registerAccount({ username, email, password });
+        if (data.welcome_email?.sent) {
+          setNotice("Account created. A welcome summary was sent to your email.");
+        } else {
+          setNotice(
+            "Account created. A welcome summary was prepared for your email (configure SMTP to deliver it)."
+          );
+        }
+        await finishAuth(data);
+      } else {
+        const data = await loginWithPassword({ email, password });
+        await finishAuth(data);
+      }
     } catch (err) {
-      setError(err.message || "Dev login failed");
+      setError(err.message || (mode === "register" ? "Registration failed" : "Sign-in failed"));
     } finally {
       setBusy(false);
     }
@@ -125,46 +155,108 @@ export default function LoginPage() {
         </div>
         <h2 className="login-title">Welcome</h2>
         <p className="login-sub">
-          Continue with Google to access chat history, settings, and your saved provider keys.
+          Continue with Google, or create an account with your email. Your chat history and API keys
+          stay private to your account.
         </p>
 
         {error && <div className="error-banner">{error}</div>}
+        {notice && (
+          <div className="error-banner" style={{ background: "rgba(15, 118, 110, 0.12)", color: "var(--ink)" }}>
+            {notice}
+          </div>
+        )}
 
         {config?.google_client_id ? (
           <div ref={googleBtn} style={{ display: "flex", justifyContent: "center", minHeight: 44 }} />
         ) : (
           <p className="disclaimer">
-            Google Client ID is not configured. Set <code>GOOGLE_CLIENT_ID</code> on the backend,
-            or enable <code>AUTH_DEV_MODE=true</code> for local testing.
+            Google Client ID is not configured. You can still register with email below.
           </p>
         )}
 
-        {config?.auth_dev_mode && (
-          <form onSubmit={handleDevLogin} style={{ marginTop: 18 }}>
-            <p className="disclaimer" style={{ marginBottom: 10 }}>
-              Development sign-in (AUTH_DEV_MODE)
-            </p>
+        <div className="auth-divider">
+          <span>or</span>
+        </div>
+
+        <div className="auth-tabs" role="tablist" aria-label="Account">
+          <button
+            type="button"
+            className={`auth-tab ${mode === "login" ? "active" : ""}`}
+            onClick={() => setMode("login")}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            className={`auth-tab ${mode === "register" ? "active" : ""}`}
+            onClick={() => setMode("register")}
+          >
+            Create account
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ marginTop: 12 }}>
+          {mode === "register" && (
             <input
               className="field"
               style={{ marginBottom: 8 }}
-              value={devName}
-              onChange={(e) => setDevName(e.target.value)}
-              placeholder="Name"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Username"
+              autoComplete="username"
+              required
+              minLength={2}
             />
+          )}
+          <input
+            className="field"
+            type="email"
+            style={{ marginBottom: 8 }}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            autoComplete="email"
+            required
+          />
+          <input
+            className="field"
+            type="password"
+            style={{ marginBottom: mode === "register" ? 8 : 10 }}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            autoComplete={mode === "register" ? "new-password" : "current-password"}
+            required
+            minLength={8}
+          />
+          {mode === "register" && (
             <input
               className="field"
-              type="email"
+              type="password"
               style={{ marginBottom: 10 }}
-              value={devEmail}
-              onChange={(e) => setDevEmail(e.target.value)}
-              placeholder="Email"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm password"
+              autoComplete="new-password"
               required
+              minLength={8}
             />
-            <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy}>
-              {busy ? "Signing in…" : "Continue with email (dev)"}
-            </button>
-          </form>
-        )}
+          )}
+          <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy}>
+            {busy
+              ? mode === "register"
+                ? "Creating account…"
+                : "Signing in…"
+              : mode === "register"
+                ? "Create account"
+                : "Sign in with email"}
+          </button>
+          {mode === "register" && (
+            <p className="disclaimer" style={{ marginTop: 10 }}>
+              We’ll email you a short summary of what ImmiAssist does after you register.
+            </p>
+          )}
+        </form>
       </div>
     </div>
   );

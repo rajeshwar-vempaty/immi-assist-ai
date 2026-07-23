@@ -26,6 +26,27 @@ def generate_api_key() -> str:
     return f"immi_{secrets.token_urlsafe(32)}"
 
 
+def hash_password(password: str) -> str:
+    """Hash a user password with PBKDF2-HMAC-SHA256."""
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
+    return f"pbkdf2_sha256$200000${salt.hex()}${digest.hex()}"
+
+
+def verify_password(password: str, password_hash: str | None) -> bool:
+    if not password_hash or not password_hash.startswith("pbkdf2_sha256$"):
+        return False
+    try:
+        _, iterations_s, salt_hex, digest_hex = password_hash.split("$", 3)
+        iterations = int(iterations_s)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(digest_hex)
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+        return secrets.compare_digest(actual, expected)
+    except Exception:
+        return False
+
+
 def mask_api_key(api_key: str) -> str:
     """Return a display-safe masked key like sk-****abcd."""
     if not api_key:
