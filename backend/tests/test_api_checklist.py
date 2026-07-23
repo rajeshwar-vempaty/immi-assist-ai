@@ -6,7 +6,8 @@ from app.schemas.schemas import ChecklistCategory, ChecklistItem, ChecklistRespo
 
 
 @patch("app.api.checklist.ChecklistService")
-def test_checklist_endpoint(MockService, client):
+def test_checklist_endpoint(MockService, client, auth_login):
+    headers, _ = auth_login("checklist@example.com")
     mock_instance = MockService.return_value
     mock_instance.generate = AsyncMock(
         return_value=ChecklistResponse(
@@ -33,8 +34,8 @@ def test_checklist_endpoint(MockService, client):
 
     response = client.post(
         "/api/v1/checklist",
+        headers=headers,
         json={"visa_type": "H1B", "details": "New employer transfer"},
-        headers={"X-Session-ID": "test-checklist-session"},
     )
     assert response.status_code == 200
     data = response.json()

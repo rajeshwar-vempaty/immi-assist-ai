@@ -1,6 +1,7 @@
 """Pytest fixtures."""
 
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -13,10 +14,21 @@ os.environ.setdefault("GOOGLE_API_KEY", "test-google")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ.setdefault("ALLOW_PUBLIC_REGISTRATION", "true")
 os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
+os.environ.setdefault("AUTH_DEV_MODE", "true")
+os.environ.setdefault("ENCRYPTION_KEY", "test-encryption-key-32-characters!")
+os.environ.setdefault("SECRET_KEY", "test-jwt-secret-key-please-change")
 
+from app.core.config import get_settings
 from app.db import base as db_base
 from app.db.base import Base, get_db
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def clear_settings_cache():
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -56,3 +68,20 @@ def client(db_engine):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def auth_login(client):
+    """Return a helper that logs in via AUTH_DEV_MODE and yields auth headers + user."""
+
+    def _login(email: str = "user@example.com", name: str = "User"):
+        resp = client.post(
+            "/api/v1/auth/dev-login",
+            json={"email": email, "name": name},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        headers = {"Authorization": f"Bearer {data['access_token']}"}
+        return headers, data["user"]
+
+    return _login

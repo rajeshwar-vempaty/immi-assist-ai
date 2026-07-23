@@ -1,13 +1,14 @@
 """FastAPI dependencies for auth and database."""
 
-import uuid
 from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session
 
-from app.core.security import hash_api_key
+from app.core.config import get_settings
+from app.core.exceptions import AuthError
+from app.core.security import decode_access_token, hash_api_key
 from app.db.base import get_db
 from app.models.models import ApiKey, User
 
@@ -25,33 +26,46 @@ class AuthContext:
         return "free"
 
     @property
-    def identity_key(self) -> tuple[str, str]:
-        """Return (type, id) for rate limiting: user or anonymous."""
-        if self.user:
-            return ("user", self.user.id)
-        return ("anonymous", self.anonymous_session_id or "")
+    def is_authenticated(self) -> bool:
+        return self.user is not None
 
 
-def get_or_create_anonymous_session(request: Request, response=None) -> str:
-    """Get anonymous session ID from header or assign new one."""
-    session_id = request.headers.get("X-Session-ID")
-    if not session_id:
-        session_id = str(uuid.uuid4())
-    request.state.anonymous_session_id = session_id
-    return session_id
+def _extract_bearer(authorization: Optional[str]) -> Optional[str]:
+    if not authorization:
+        return None
+    parts = authorization.split(" ", 1)
+    if len(parts) == 2 and parts[0].lower() == "bearer":
+        return parts[1].strip()
+    return None
+
+
+def _user_from_token(db: Session, token: str) -> User:
+    payload = decode_access_token(token)
+    user = db.query(User).filter(User.id == payload["sub"]).first()
+    if not user:
+        raise AuthError("Session expired or invalid. Please sign in again.", status_code=401)
+    return user
 
 
 async def get_auth_context(
     request: Request,
+    authorization: Optional[str] = Header(None),
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
-    x_session_id: Optional[str] = Header(None, alias="X-Session-ID"),
     db: Session = Depends(get_db),
 ) -> AuthContext:
-    """Resolve user from API key or anonymous session."""
+    """Resolve authenticated user from JWT cookie/header or legacy platform API key."""
+    settings = get_settings()
     user = None
     api_key_id = None
 
-    if x_api_key:
+    bearer = _extract_bearer(authorization)
+    cookie_token = request.cookies.get(settings.session_cookie_name)
+    token = bearer or cookie_token
+    if token:
+        # Invalid/expired session tokens must not silently become anonymous.
+        user = _user_from_token(db, token)
+
+    if not user and x_api_key:
         key_hash = hash_api_key(x_api_key)
         api_key = (
             db.query(ApiKey)
@@ -62,13 +76,10 @@ async def get_auth_context(
             user = db.query(User).filter(User.id == api_key.user_id).first()
             api_key_id = api_key.id
 
-    anonymous_session_id = x_session_id
-    if not user:
-        anonymous_session_id = get_or_create_anonymous_session(request)
-        request.state.anonymous_session_id = anonymous_session_id
+    return AuthContext(user=user, anonymous_session_id=None, api_key_id=api_key_id)
 
-    return AuthContext(
-        user=user,
-        anonymous_session_id=anonymous_session_id if not user else None,
-        api_key_id=api_key_id,
-    )
+
+async def require_user(auth: AuthContext = Depends(get_auth_context)) -> User:
+    if not auth.user:
+        raise AuthError("Authentication required. Please sign in.", status_code=401)
+    return auth.user

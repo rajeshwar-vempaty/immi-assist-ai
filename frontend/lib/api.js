@@ -1,110 +1,181 @@
 /**
- * API client for ImmiAssist backend
+ * API client — session JWT via cookie + Authorization header.
+ * Provider API keys are NEVER stored in the browser.
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const TOKEN_KEY = "immi_access_token";
 
-function getHeaders() {
-  const headers = { "Content-Type": "application/json" };
-  if (typeof window !== "undefined") {
-    const apiKey = localStorage.getItem("immi_api_key");
-    const sessionId = localStorage.getItem("immi_session_id");
-    if (apiKey) headers["X-API-Key"] = apiKey;
-    if (sessionId) headers["X-Session-ID"] = sessionId;
-  }
-  return headers;
+export function getAccessToken() {
+  if (typeof window === "undefined") return "";
+  return sessionStorage.getItem(TOKEN_KEY) || "";
 }
 
-function saveSessionFromResponse(response) {
-  const sessionId = response.headers.get("X-Session-ID");
-  if (sessionId && typeof window !== "undefined") {
-    localStorage.setItem("immi_session_id", sessionId);
+export function setAccessToken(token) {
+  if (typeof window === "undefined") return;
+  if (token) sessionStorage.setItem(TOKEN_KEY, token);
+  else sessionStorage.removeItem(TOKEN_KEY);
+}
+
+export function clearClientSession() {
+  if (typeof window === "undefined") return;
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("immi_")) keys.push(k);
   }
+  keys.forEach((k) => localStorage.removeItem(k));
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem("immi_draft_message");
+}
+
+function getHeaders(extra = {}) {
+  const headers = { "Content-Type": "application/json", ...extra };
+  const token = getAccessToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: { ...getHeaders(), ...options.headers },
+    credentials: "include",
+    headers: getHeaders(options.headers || {}),
   });
-  saveSessionFromResponse(response);
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `API error: ${response.status}`);
+    let message = err.error || `API error: ${response.status}`;
+    if (!err.error && err.detail) {
+      if (typeof err.detail === "string") message = err.detail;
+      else if (Array.isArray(err.detail)) {
+        message = err.detail.map((d) => d.msg || JSON.stringify(d)).join("; ");
+      }
+    }
+    const error = new Error(message);
+    error.status = response.status;
+    error.payload = err;
+    throw error;
   }
+  if (response.status === 204) return null;
   return response.json();
 }
 
-export async function sendChatMessage(message, chatHistory = [], sessionId = null) {
-  const body = {
-    message,
-    chat_history: chatHistory.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    })),
-  };
-  if (sessionId) body.session_id = sessionId;
+export async function getAuthConfig() {
+  return apiRequest("/auth/config");
+}
 
-  const data = await apiRequest("/chat", {
+export async function loginWithGoogle(idToken) {
+  const data = await apiRequest("/auth/google", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify({ id_token: idToken }),
   });
-  if (data.session_id && typeof window !== "undefined") {
-    localStorage.setItem("immi_chat_session_id", data.session_id);
-  }
+  setAccessToken(data.access_token);
   return data;
 }
 
-export async function createChecklist(payload) {
-  return apiRequest("/checklist", {
+export async function loginDev(email, name) {
+  const data = await apiRequest("/auth/dev-login", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ email, name }),
   });
+  setAccessToken(data.access_token);
+  return data;
 }
 
-export async function estimateTimeline(payload) {
-  return apiRequest("/timeline", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function analyzeRFE(payload) {
-  return apiRequest("/rfe/analyze", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function registerUser(email = null, tier = "starter") {
-  return apiRequest("/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ email, tier }),
-  });
+export async function logout() {
+  try {
+    await apiRequest("/auth/logout", { method: "POST" });
+  } finally {
+    clearClientSession();
+  }
 }
 
 export async function getAuthMe() {
   return apiRequest("/auth/me");
 }
 
-export async function healthCheck() {
-  return apiRequest("/health");
+export async function sendChatMessage({
+  message,
+  chatHistory = [],
+  conversationId = null,
+  provider = null,
+  model = null,
+}) {
+  return apiRequest("/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      message,
+      chat_history: chatHistory.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+      conversation_id: conversationId,
+      provider,
+      model,
+    }),
+  });
 }
 
-export async function readinessCheck() {
-  return apiRequest("/health/ready");
+export async function listConversations() {
+  return apiRequest("/conversations");
 }
 
-export function setApiKey(key) {
-  if (typeof window !== "undefined") {
-    if (key) localStorage.setItem("immi_api_key", key);
-    else localStorage.removeItem("immi_api_key");
-  }
+export async function getConversation(id) {
+  return apiRequest(`/conversations/${id}`);
 }
 
-export function getStoredApiKey() {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("immi_api_key") || "";
-  }
-  return "";
+export async function createConversation(title = "New conversation") {
+  return apiRequest("/conversations", {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+}
+
+export async function deleteConversation(id) {
+  return apiRequest(`/conversations/${id}`, { method: "DELETE" });
+}
+
+export async function createChecklist(payload) {
+  return apiRequest("/checklist", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function estimateTimeline(payload) {
+  return apiRequest("/timeline", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function analyzeRFE(payload) {
+  return apiRequest("/rfe/analyze", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function getSettingsPreferences() {
+  return apiRequest("/settings/preferences");
+}
+
+export async function updateSettingsPreferences(payload) {
+  return apiRequest("/settings/preferences", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listCredentials() {
+  return apiRequest("/settings/credentials");
+}
+
+export async function saveCredential(provider, apiKey) {
+  return apiRequest(`/settings/credentials/${provider}`, {
+    method: "PUT",
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+}
+
+export async function testCredential(provider, apiKey = null) {
+  return apiRequest(`/settings/credentials/${provider}/test`, {
+    method: "POST",
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+}
+
+export async function deleteCredential(provider) {
+  return apiRequest(`/settings/credentials/${provider}`, { method: "DELETE" });
 }

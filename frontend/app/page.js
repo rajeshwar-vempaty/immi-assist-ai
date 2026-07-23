@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import { useAuth } from "../lib/auth";
 import {
-  sendChatMessage,
-  createChecklist,
-  estimateTimeline,
   analyzeRFE,
-  registerUser,
-  setApiKey,
-  getStoredApiKey,
+  createChecklist,
+  deleteConversation,
+  estimateTimeline,
+  getConversation,
+  getSettingsPreferences,
+  listConversations,
+  sendChatMessage,
 } from "../lib/api";
 
 const TABS = [
@@ -40,42 +43,6 @@ const SERVICE_CENTERS = [
   "National Benefits Center",
 ];
 
-const HISTORY_KEY = "immi_chat_history_v1";
-const USER_KEY = "immi_user_profile_v1";
-
-function loadHistory() {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(items) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 40)));
-}
-
-function loadUser() {
-  if (typeof window === "undefined") return null;
-  try {
-    return JSON.parse(localStorage.getItem(USER_KEY) || "null");
-  } catch {
-    return null;
-  }
-}
-
-function saveUser(user) {
-  if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
-  else localStorage.removeItem(USER_KEY);
-}
-
-function titleFromMessages(messages) {
-  const first = messages.find((m) => m.role === "user");
-  if (!first) return "New conversation";
-  return first.content.slice(0, 48) + (first.content.length > 48 ? "…" : "");
-}
-
 function formatTime(iso) {
   try {
     return new Date(iso).toLocaleString(undefined, {
@@ -90,81 +57,102 @@ function formatTime(iso) {
 }
 
 export default function Home() {
+  const { user, loading, signOut } = useAuth();
   const [tab, setTab] = useState("chat");
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [user, setUser] = useState(null);
-  const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [activeChatId, setActiveChatId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [prefs, setPrefs] = useState(null);
+  const [provider, setProvider] = useState("");
+  const [model, setModel] = useState("");
   const messagesEndRef = useRef(null);
+  const menuRef = useRef(null);
+  const draftKey = "immi_draft_message";
 
   const [visaType, setVisaType] = useState("H1B");
   const [checklistDetails, setChecklistDetails] = useState("");
   const [checklistResult, setChecklistResult] = useState(null);
-
   const [formType, setFormType] = useState("I-129");
   const [serviceCenter, setServiceCenter] = useState(SERVICE_CENTERS[0]);
   const [filingDate, setFilingDate] = useState("");
   const [timelineResult, setTimelineResult] = useState(null);
-
   const [rfeText, setRfeText] = useState("");
   const [rfeResult, setRfeResult] = useState(null);
 
+  const configuredCatalog = useMemo(
+    () => (prefs?.catalog || []).filter((c) => c.configured),
+    [prefs]
+  );
+
+  const modelsForProvider = useMemo(() => {
+    const entry = configuredCatalog.find((c) => c.id === provider);
+    return entry?.models || [];
+  }, [configuredCatalog, provider]);
+
   useEffect(() => {
-    setApiKeyInput(getStoredApiKey());
-    setUser(loadUser());
-    const items = loadHistory();
-    setHistory(items);
-    if (items[0]) {
-      setActiveChatId(items[0].id);
-      setMessages(items[0].messages || []);
-    }
-  }, []);
+    if (!user) return;
+    const draft = sessionStorage.getItem(draftKey);
+    if (draft) setInput(draft);
+    (async () => {
+      setHistoryLoading(true);
+      try {
+        const [convData, prefData] = await Promise.all([
+          listConversations(),
+          getSettingsPreferences(),
+        ]);
+        setHistory(convData.conversations || []);
+        setPrefs(prefData);
+        setProvider(prefData.default_provider || "");
+        setModel(prefData.default_model || "");
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setHistoryLoading(false);
+      }
+    })();
+  }, [user]);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onPointer = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, tab]);
 
-  const persistConversation = (nextMessages, chatId = activeChatId) => {
-    const now = new Date().toISOString();
-    let items = loadHistory();
-    if (!chatId) {
-      const id = crypto.randomUUID();
-      const entry = {
-        id,
-        title: titleFromMessages(nextMessages),
-        messages: nextMessages,
-        updatedAt: now,
-      };
-      items = [entry, ...items];
-      setActiveChatId(id);
-      setHistory(items);
-      saveHistory(items);
-      return id;
-    }
-    items = items.map((item) =>
-      item.id === chatId
-        ? {
-            ...item,
-            title: titleFromMessages(nextMessages),
-            messages: nextMessages,
-            updatedAt: now,
-          }
-        : item
-    );
-    setHistory(items);
-    saveHistory(items);
-    return chatId;
-  };
+  useEffect(() => {
+    sessionStorage.setItem(draftKey, input);
+  }, [input]);
 
-  const startNewChat = () => {
+  if (loading || !user) {
+    return (
+      <div className="login-shell">
+        <div className="login-card">
+          <p style={{ color: "var(--muted)" }}>Loading your workspace…</p>
+        </div>
+      </div>
+    );
+  }
+
+  const startNewChat = async () => {
     setActiveChatId(null);
     setMessages([]);
     setError(null);
@@ -172,85 +160,77 @@ export default function Home() {
     setHistoryOpen(false);
   };
 
-  const openChat = (id) => {
-    const item = history.find((h) => h.id === id);
-    if (!item) return;
-    setActiveChatId(id);
-    setMessages(item.messages || []);
-    setTab("chat");
-    setHistoryOpen(false);
-  };
-
-  const handleSaveApiKey = () => {
-    setApiKey(apiKeyInput);
+  const openChat = async (id) => {
     setError(null);
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setError(null);
-    const name = displayName.trim() || email.split("@")[0] || "Guest";
     try {
-      // Optional: mint an API key when registering with backend
-      let apiKey = getStoredApiKey();
-      if (!apiKey && email.trim()) {
-        try {
-          const result = await registerUser(email.trim(), "free");
-          apiKey = result.api_key;
-          setApiKey(apiKey);
-          setApiKeyInput(apiKey);
-        } catch {
-          // Public registration may be disabled — still allow local profile UI
-        }
-      }
-      const profile = {
-        name,
-        email: email.trim() || null,
-        signedInAt: new Date().toISOString(),
-      };
-      saveUser(profile);
-      setUser(profile);
-      setLoginOpen(false);
+      const detail = await getConversation(id);
+      setActiveChatId(detail.id);
+      setMessages(
+        (detail.messages || []).map((m) => ({
+          role: m.role,
+          content: m.content,
+          meta: { sources: m.sources, model: m.model, provider: m.provider },
+        }))
+      );
+      setTab("chat");
+      setHistoryOpen(false);
     } catch (err) {
-      setError(err.message || "Could not sign in");
+      setError(err.message);
     }
   };
 
-  const handleSignOut = () => {
-    saveUser(null);
-    setUser(null);
+  const handleSignOut = async () => {
+    setMessages([]);
+    setHistory([]);
+    setActiveChatId(null);
+    setPrefs(null);
+    setError(null);
+    await signOut();
   };
 
   const handleSend = async (messageText = null) => {
     const text = messageText || input.trim();
     if (!text || isLoading) return;
+    if (!provider || !model) {
+      setError("Select a provider/model in the selector, or add API keys in Settings.");
+      return;
+    }
     setError(null);
     const userMessage = { role: "user", content: text };
     const next = [...messages, userMessage];
     setMessages(next);
     setInput("");
+    sessionStorage.removeItem(draftKey);
     setIsLoading(true);
-    const chatId = persistConversation(next);
 
     try {
-      const sessionId =
-        typeof window !== "undefined"
-          ? localStorage.getItem("immi_chat_session_id")
-          : null;
-      const response = await sendChatMessage(text, messages, sessionId);
+      const response = await sendChatMessage({
+        message: text,
+        chatHistory: messages,
+        conversationId: activeChatId,
+        provider,
+        model,
+      });
       const assistantMessage = {
         role: "assistant",
         content: response.response,
         meta: {
           intent: response.intent,
           model: response.model_used,
+          provider: response.provider,
           sources: response.sources,
         },
       };
-      const withAssistant = [...next, assistantMessage];
-      setMessages(withAssistant);
-      persistConversation(withAssistant, chatId);
+      setMessages([...next, assistantMessage]);
+      setActiveChatId(response.conversation_id);
+      const convData = await listConversations();
+      setHistory(convData.conversations || []);
     } catch (err) {
+      if (err.status === 401) {
+        setError("Session expired. Please sign in again.");
+        await handleSignOut();
+        return;
+      }
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -302,7 +282,7 @@ export default function Home() {
     }
   };
 
-  const initials = (user?.name || "G")
+  const initials = (user.name || user.email || "U")
     .split(" ")
     .map((p) => p[0])
     .join("")
@@ -324,29 +304,50 @@ export default function Home() {
           <button className="btn btn-primary" style={{ flex: 1 }} onClick={startNewChat}>
             New chat
           </button>
-          <button
-            className="btn btn-ghost mobile-bar"
-            onClick={() => setHistoryOpen(false)}
-          >
+          <button className="btn btn-ghost mobile-bar" onClick={() => setHistoryOpen(false)}>
             Close
           </button>
         </div>
 
         <div className="history-list">
-          {history.length === 0 && (
+          {historyLoading && (
+            <p style={{ color: "var(--muted)", fontSize: "0.85rem", padding: "0 4px" }}>
+              Loading conversations…
+            </p>
+          )}
+          {!historyLoading && history.length === 0 && (
             <p style={{ color: "var(--muted)", fontSize: "0.85rem", padding: "0 4px" }}>
               Your conversations will appear here.
             </p>
           )}
           {history.map((item) => (
-            <button
-              key={item.id}
-              className={`history-item ${item.id === activeChatId ? "active" : ""}`}
-              onClick={() => openChat(item.id)}
-            >
-              <div className="title">{item.title}</div>
-              <div className="meta">{formatTime(item.updatedAt)}</div>
-            </button>
+            <div key={item.id} style={{ display: "flex", gap: 4 }}>
+              <button
+                className={`history-item ${item.id === activeChatId ? "active" : ""}`}
+                style={{ flex: 1 }}
+                onClick={() => openChat(item.id)}
+              >
+                <div className="title">{item.title}</div>
+                <div className="meta">{formatTime(item.updated_at)}</div>
+              </button>
+              <button
+                className="btn btn-ghost"
+                title="Delete"
+                onClick={async () => {
+                  if (!confirm("Delete this conversation?")) return;
+                  try {
+                    await deleteConversation(item.id);
+                    if (activeChatId === item.id) startNewChat();
+                    const convData = await listConversations();
+                    setHistory(convData.conversations || []);
+                  } catch (err) {
+                    setError(err.message || "Failed to delete conversation");
+                  }
+                }}
+              >
+                ×
+              </button>
+            </div>
           ))}
         </div>
       </aside>
@@ -372,26 +373,73 @@ export default function Home() {
           </nav>
 
           <div className="topbar-right">
-            {user ? (
-              <>
-                <div className="user-chip">
-                  <span className="avatar">{initials}</span>
-                  <span>{user.name}</span>
-                </div>
-                <button className="btn btn-ghost" onClick={handleSignOut}>
-                  Sign out
-                </button>
-              </>
-            ) : (
-              <button className="btn btn-ink" onClick={() => setLoginOpen(true)}>
-                Sign in
-              </button>
+            {tab === "chat" && (
+              <div className="model-selects">
+                <select
+                  className="select compact"
+                  value={provider}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setProvider(next);
+                    const first = configuredCatalog.find((c) => c.id === next)?.models?.[0]?.id || "";
+                    setModel(first);
+                  }}
+                >
+                  <option value="">Provider</option>
+                  {configuredCatalog.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="select compact"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  disabled={!provider}
+                >
+                  <option value="">Model</option>
+                  {modelsForProvider.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
+
+            <div className="account-menu" ref={menuRef}>
+              <button className="user-chip" onClick={() => setMenuOpen((v) => !v)}>
+                {user.picture ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.picture} alt="" className="avatar-img" />
+                ) : (
+                  <span className="avatar">{initials}</span>
+                )}
+                <span>{user.name || user.email}</span>
+              </button>
+              {menuOpen && (
+                <div className="menu-dropdown">
+                  <Link href="/settings" className="menu-item" onClick={() => setMenuOpen(false)}>
+                    Profile &amp; API keys
+                  </Link>
+                  <button className="menu-item" onClick={handleSignOut}>
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
-        <main className={`content ${tab === "chat" ? "" : ""}`}>
+        <main className="content">
           {error && <div className="error-banner">{error}</div>}
+          {configuredCatalog.length === 0 && (
+            <div className="error-banner">
+              No provider API keys yet.{" "}
+              <Link href="/settings">Add keys in Settings</Link> to start chatting.
+            </div>
+          )}
 
           {tab === "chat" && (
             <>
@@ -399,8 +447,8 @@ export default function Home() {
                 <section className="hero-block">
                   <h2>Ask clearly. Decide calmly.</h2>
                   <p>
-                    Get grounded answers on visas, documents, timelines, and RFEs —
-                    with sources you can check.
+                    Get grounded answers on visas, documents, timelines, and RFEs — with sources
+                    you can check.
                   </p>
                   <div className="quick-grid">
                     {QUICK_QUESTIONS.map((q) => (
@@ -409,10 +457,6 @@ export default function Home() {
                       </button>
                     ))}
                   </div>
-                  <p className="disclaimer">
-                    Informational guidance only — not legal advice. For your specific
-                    case, consult a licensed immigration attorney.
-                  </p>
                 </section>
               ) : (
                 <div className="messages">
@@ -448,18 +492,9 @@ export default function Home() {
           {tab === "checklist" && (
             <section className="panel-stack">
               <h2 className="section-title">Document checklist</h2>
-              <p className="section-sub">
-                Build a filing-ready list for your petition type and situation.
-              </p>
-              <select
-                className="select"
-                value={visaType}
-                onChange={(e) => setVisaType(e.target.value)}
-              >
+              <select className="select" value={visaType} onChange={(e) => setVisaType(e.target.value)}>
                 {VISA_TYPES.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
+                  <option key={v} value={v}>{v}</option>
                 ))}
               </select>
               <textarea
@@ -476,28 +511,21 @@ export default function Home() {
               </div>
               {checklistResult && (
                 <div className="result-block">
-                  <h3 style={{ marginTop: 0 }}>
+                  <h3>
                     {checklistResult.visa_type} — {checklistResult.form_number}
                   </h3>
-                  <p style={{ color: "var(--muted)" }}>
-                    Fee: {checklistResult.filing_fee} · Prep time:{" "}
-                    {checklistResult.estimated_prep_time}
-                  </p>
                   {checklistResult.checklist.map((cat, i) => (
                     <div key={i} className="category">
                       <h4>{cat.category}</h4>
                       <ul>
                         {cat.items.map((item, j) => (
                           <li key={j}>
-                            <strong>{item.document}</strong>
-                            {item.required ? " (required)" : " (optional)"} —{" "}
-                            {item.description}
+                            <strong>{item.document}</strong> — {item.description}
                           </li>
                         ))}
                       </ul>
                     </div>
                   ))}
-                  <p className="disclaimer">{checklistResult.disclaimer}</p>
                 </div>
               )}
             </section>
@@ -506,49 +534,20 @@ export default function Home() {
           {tab === "timeline" && (
             <section className="panel-stack">
               <h2 className="section-title">Processing timeline</h2>
-              <p className="section-sub">
-                Estimate wait ranges from current USCIS processing-time guidance.
-              </p>
-              <input
-                className="field"
-                value={formType}
-                onChange={(e) => setFormType(e.target.value)}
-                placeholder="Form type (e.g. I-129)"
-              />
-              <select
-                className="select"
-                value={serviceCenter}
-                onChange={(e) => setServiceCenter(e.target.value)}
-              >
+              <input className="field" value={formType} onChange={(e) => setFormType(e.target.value)} />
+              <select className="select" value={serviceCenter} onChange={(e) => setServiceCenter(e.target.value)}>
                 {SERVICE_CENTERS.map((sc) => (
-                  <option key={sc} value={sc}>
-                    {sc}
-                  </option>
+                  <option key={sc} value={sc}>{sc}</option>
                 ))}
               </select>
-              <input
-                className="field"
-                type="date"
-                value={filingDate}
-                onChange={(e) => setFilingDate(e.target.value)}
-              />
-              <div>
-                <button className="btn btn-primary" onClick={handleTimeline} disabled={isLoading}>
-                  Estimate timeline
-                </button>
-              </div>
+              <input className="field" type="date" value={filingDate} onChange={(e) => setFilingDate(e.target.value)} />
+              <button className="btn btn-primary" onClick={handleTimeline} disabled={isLoading}>
+                Estimate timeline
+              </button>
               {timelineResult && (
                 <div className="result-block">
-                  <h3 style={{ marginTop: 0 }}>{timelineResult.form_type}</h3>
-                  <p>
-                    Status: <strong>{timelineResult.case_status}</strong>
-                  </p>
+                  <h3>{timelineResult.form_type}</h3>
                   <p>{timelineResult.status_explanation}</p>
-                  <p>
-                    Range: {timelineResult.processing_range_months?.min}–
-                    {timelineResult.processing_range_months?.max} months
-                  </p>
-                  <p className="disclaimer">{timelineResult.disclaimer}</p>
                 </div>
               )}
             </section>
@@ -557,9 +556,6 @@ export default function Home() {
           {tab === "rfe" && (
             <section className="panel-stack">
               <h2 className="section-title">RFE analysis</h2>
-              <p className="section-sub">
-                Paste the notice text to break down issues, evidence, and next steps.
-              </p>
               <textarea
                 className="field"
                 rows={10}
@@ -567,36 +563,12 @@ export default function Home() {
                 onChange={(e) => setRfeText(e.target.value)}
                 placeholder="Paste your RFE notice text here…"
               />
-              <div>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleRFE}
-                  disabled={isLoading || rfeText.length < 10}
-                >
-                  Analyze RFE
-                </button>
-              </div>
+              <button className="btn btn-primary" onClick={handleRFE} disabled={isLoading || rfeText.length < 10}>
+                Analyze RFE
+              </button>
               {rfeResult && (
                 <div className="result-block">
-                  <h3 style={{ marginTop: 0 }}>Summary</h3>
                   <ReactMarkdown>{rfeResult.summary}</ReactMarkdown>
-                  <p>
-                    <strong>Risk:</strong> {rfeResult.risk_level}
-                  </p>
-                  <p>
-                    <strong>Deadline:</strong> {rfeResult.deadline_info}
-                  </p>
-                  {rfeResult.points?.map((p, i) => (
-                    <div key={i} className="category">
-                      <h4>{p.issue}</h4>
-                      <ul>
-                        {p.evidence_suggestions?.map((s, j) => (
-                          <li key={j}>{s}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                  <p className="disclaimer">{rfeResult.disclaimer}</p>
                 </div>
               )}
             </section>
@@ -629,61 +601,6 @@ export default function Home() {
           </div>
         )}
       </div>
-
-      {loginOpen && (
-        <div className="modal-backdrop" onClick={() => setLoginOpen(false)}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleLogin}
-          >
-            <h3>Welcome back</h3>
-            <p>
-              Sign in to keep your profile handy. Chat history is saved on this device
-              for now — account sync comes next.
-            </p>
-            <input
-              className="field"
-              style={{ marginBottom: 10 }}
-              placeholder="Display name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-            />
-            <input
-              className="field"
-              type="email"
-              placeholder="Email (optional)"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <details style={{ marginTop: 12 }}>
-              <summary style={{ cursor: "pointer", color: "var(--muted)", fontSize: "0.85rem" }}>
-                Advanced: API key
-              </summary>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <input
-                  className="field"
-                  type="password"
-                  placeholder="API key"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                />
-                <button type="button" className="btn btn-ghost" onClick={handleSaveApiKey}>
-                  Save
-                </button>
-              </div>
-            </details>
-            <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setLoginOpen(false)}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary">
-                Continue
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }

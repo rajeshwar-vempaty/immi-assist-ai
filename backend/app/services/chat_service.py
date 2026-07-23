@@ -1,26 +1,27 @@
-"""Chat service — intent classification, RAG, LLM routing, persistence."""
+"""Chat service — authenticated user chat with provider routing and conversation persistence."""
 
-import json
 import logging
 import re
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.core.deps import AuthContext
-from app.core.llm_router import Intent, get_llm_router
+from app.core.llm_router import Intent
 from app.core.prompts import (
     CHECKLIST_PROMPT,
     POLICY_QA_PROMPT,
     RFE_ANALYSIS_PROMPT,
     TIMELINE_PROMPT,
 )
-from app.models.models import ChatMessage, ChatSession
+from app.models.models import Message, User
+from app.providers import get_provider
 from app.schemas.schemas import ChatRequest, ChatResponse
+from app.services import conversation_service as convs
+from app.services import credentials_service as creds
 from app.services.llm_json_service import extract_json
 from app.services.rag_service import get_rag_service
 from app.utils.citations import format_citations
-from app.utils.disclaimer import inject_disclaimer, check_confidence, CASE_SPECIFIC_REDIRECT
+from app.utils.disclaimer import CASE_SPECIFIC_REDIRECT, check_confidence, inject_disclaimer
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +51,12 @@ def _resolve_timeline_form_type(sub_topic: str | None, message: str) -> str:
 
 
 def _format_timeline_text(data: dict) -> str:
-    """Turn timeline JSON into readable chat text."""
     proc = data.get("current_processing_range") or data.get("processing_range_months") or {}
     min_m = proc.get("min_months", proc.get("min", "?"))
     max_m = proc.get("max_months", proc.get("max", "?"))
     completion = data.get("estimated_completion") or {}
     options = data.get("options_if_delayed") or []
     tips = data.get("tips") or []
-
     lines = [
         f"**{data.get('form_type', 'Form')} processing timeline**",
         "",
@@ -83,7 +82,6 @@ def _format_timeline_text(data: dict) -> str:
 
 
 def _format_checklist_text(data: dict) -> str:
-    """Turn checklist JSON into readable chat text."""
     lines = [
         f"**Document checklist: {data.get('visa_type', 'Visa')}**",
         f"Primary form: {data.get('form_number', 'N/A')}",
@@ -95,7 +93,9 @@ def _format_checklist_text(data: dict) -> str:
         lines.append(f"### {cat.get('category', 'Documents')}")
         for item in cat.get("items") or []:
             mark = "Required" if item.get("required", True) else "Optional"
-            lines.append(f"- **{item.get('document', 'Document')}** ({mark}): {item.get('description', '')}")
+            lines.append(
+                f"- **{item.get('document', 'Document')}** ({mark}): {item.get('description', '')}"
+            )
             if item.get("tips"):
                 lines.append(f"  - Tip: {item['tips']}")
         lines.append("")
@@ -107,7 +107,6 @@ def _format_checklist_text(data: dict) -> str:
 
 
 def _humanize_structured_response(intent: Intent, content: str) -> str:
-    """If the LLM returned JSON for checklist/timeline, format it for chat."""
     if intent not in (Intent.TIMELINE, Intent.CHECKLIST):
         return content
     try:
@@ -119,74 +118,105 @@ def _humanize_structured_response(intent: Intent, content: str) -> str:
     return _format_checklist_text(data)
 
 
+def _detect_visa_type(message: str) -> str | None:
+    """Best-effort visa/category label from the user message (from main keyword classifier)."""
+    message_lower = message.lower()
+    compact = message_lower.replace(" ", "")
+    for token in (
+        "h-1b",
+        "h1b",
+        "h4",
+        "l-1a",
+        "l1a",
+        "l-1b",
+        "l1b",
+        "o-1",
+        "o1",
+        "eb-1",
+        "eb1",
+        "eb-2",
+        "eb2",
+        "eb-3",
+        "eb3",
+        "niw",
+        "f-1",
+        "f1",
+        "opt",
+        "i-485",
+        "i485",
+        "i-140",
+        "i140",
+        "i-129",
+        "i129",
+    ):
+        if token in compact or token in message_lower:
+            visa_type = token.upper().replace("-", "")
+            return visa_type
+    return None
+
+
+def _keyword_intent(message: str) -> Intent:
+    lower = message.lower()
+    if any(k in lower for k in ["rfe", "request for evidence", "noid"]):
+        return Intent.RFE_HELP
+    if any(k in lower for k in ["documents", "checklist", "what do i need", "paperwork"]):
+        return Intent.CHECKLIST
+    if any(k in lower for k in ["how long", "processing time", "timeline", "timelines", "approval"]):
+        return Intent.TIMELINE
+    if any(k in lower for k in ["my case", "my application", "my receipt"]):
+        return Intent.CASE_SPECIFIC
+    return Intent.POLICY_QA
+
+
 class ChatService:
-    def __init__(self, db: Session, auth: AuthContext):
+    def __init__(self, db: Session, user: User):
         self.db = db
-        self.auth = auth
-        self.llm_router = get_llm_router()
+        self.user = user
         self.rag_service = get_rag_service()
 
-    def _get_or_create_session(self, session_id: str | None) -> ChatSession:
-        if session_id:
-            existing = self.db.query(ChatSession).filter(ChatSession.id == session_id).first()
-            if existing:
-                return existing
-
-        session = ChatSession(
-            user_id=self.auth.user.id if self.auth.user else None,
-            anonymous_session_id=self.auth.anonymous_session_id if not self.auth.user else None,
-        )
-        self.db.add(session)
-        self.db.commit()
-        self.db.refresh(session)
-        return session
-
-    def _save_message(
-        self,
-        session: ChatSession,
-        role: str,
-        content: str,
-        intent: str | None = None,
-        model_used: str | None = None,
-        sources: list[str] | None = None,
-    ) -> None:
-        msg = ChatMessage(
-            session_id=session.id,
-            role=role,
-            content=content,
-            intent=intent,
-            model_used=model_used,
-            sources_json=json.dumps(sources or []),
-        )
-        self.db.add(msg)
-        self.db.commit()
-
     async def process(self, request: ChatRequest) -> ChatResponse:
-        classified = await self.llm_router.classify_intent(request.message)
-        logger.info(
-            f"Intent: {classified.intent} | Confidence: {classified.confidence}"
+        provider, model, api_key = creds.resolve_provider_model(
+            self.db,
+            self.user,
+            request.provider,
+            request.model,
         )
 
-        session = self._get_or_create_session(request.session_id)
-        self._save_message(session, "user", request.message)
+        if request.conversation_id:
+            conversation = convs.get_conversation(self.db, self.user, request.conversation_id)
+        else:
+            conversation = convs.create_conversation(self.db, self.user)
 
-        if classified.intent == Intent.CASE_SPECIFIC:
-            response = ChatResponse(
-                response=CASE_SPECIFIC_REDIRECT,
-                intent=classified.intent.value,
-                confidence=classified.confidence,
+        convs.add_message(self.db, conversation, role="user", content=request.message)
+
+        intent = _keyword_intent(request.message)
+        confidence = 0.7
+        visa_type = _detect_visa_type(request.message)
+
+        if intent == Intent.CASE_SPECIFIC:
+            response_text = CASE_SPECIFIC_REDIRECT
+            convs.add_message(
+                self.db,
+                conversation,
+                role="assistant",
+                content=response_text,
+                provider="system",
+                model="system",
+                intent=intent.value,
+            )
+            return ChatResponse(
+                response=response_text,
+                intent=intent.value,
+                confidence=confidence,
                 model_used="system",
+                provider="system",
                 sources=[],
                 requires_lawyer=True,
-                session_id=session.id,
+                conversation_id=conversation.id,
+                session_id=conversation.id,
             )
-            self._save_message(session, "assistant", response.response, intent=response.intent)
-            return response
 
-        collection = "uscis_policy"
-        if classified.intent == Intent.TIMELINE:
-            collection = "processing_times"
-
+        collection = "processing_times" if intent == Intent.TIMELINE else "uscis_policy"
         retrieved_docs = self.rag_service.retrieve(
             query=request.message,
             n_results=5,
@@ -194,34 +224,41 @@ class ChatService:
         )
         context, sources = self.rag_service.format_context(retrieved_docs)
 
+        prior = (
+            self.db.query(Message)
+            .filter(Message.conversation_id == conversation.id)
+            .order_by(Message.created_at.asc())
+            .all()
+        )
+        # Exclude the user message we just persisted
+        history_msgs = [{"role": m.role, "content": m.content} for m in prior[:-1]][-6:]
+        if not history_msgs and request.chat_history:
+            history_msgs = [
+                {"role": m.role, "content": m.content} for m in request.chat_history[-6:]
+            ]
+
         chat_history_str = "\n".join(
-            [f"{msg.role}: {msg.content}" for msg in request.chat_history[-6:]]
+            [f"{msg['role']}: {msg['content']}" for msg in history_msgs]
         )
 
-        if classified.intent in (Intent.POLICY_QA, Intent.GENERAL):
-            system_prompt = POLICY_QA_PROMPT.format(
-                context=context,
-                question=request.message,
-                chat_history=chat_history_str or "No prior history.",
-            )
-        elif classified.intent == Intent.CHECKLIST:
+        if intent == Intent.CHECKLIST:
             system_prompt = CHECKLIST_PROMPT.format(
-                visa_type=classified.visa_type or "Unknown",
+                visa_type=visa_type or "Unknown",
                 details=request.message,
                 context=context,
             )
-        elif classified.intent == Intent.RFE_HELP:
+        elif intent == Intent.RFE_HELP:
             system_prompt = RFE_ANALYSIS_PROMPT.format(
                 rfe_text=request.message,
-                petition_type=classified.visa_type or "Unknown",
+                petition_type=visa_type or "Unknown",
                 context=context,
             )
-        elif classified.intent == Intent.TIMELINE:
+        elif intent == Intent.TIMELINE:
             system_prompt = TIMELINE_PROMPT.format(
-                form_type=_resolve_timeline_form_type(classified.sub_topic, request.message),
+                form_type=_resolve_timeline_form_type(None, request.message),
                 service_center="Unknown",
                 filing_date="Not provided",
-                category=classified.visa_type or "General",
+                category=visa_type or "General",
                 processing_data=context,
                 context=context,
             )
@@ -232,45 +269,49 @@ class ChatService:
                 chat_history=chat_history_str or "No prior history.",
             )
 
-        llm_response = await self.llm_router.route_and_respond(
-            user_message=request.message,
+        adapter = get_provider(provider)
+        result = await adapter.chat(
+            api_key=api_key,
+            model=model,
             system_prompt=system_prompt,
-            intent=classified.intent,
+            user_message=request.message,
+            history=history_msgs,
         )
 
-        response_text = _humanize_structured_response(
-            classified.intent, llm_response.content
-        )
-        confidence_warning = check_confidence(classified.confidence)
+        response_text = _humanize_structured_response(intent, result.content)
+        confidence_warning = check_confidence(confidence)
         if confidence_warning:
             response_text = confidence_warning + "\n\n" + response_text
 
         disclaimer_type = {
             Intent.RFE_HELP: "rfe",
             Intent.TIMELINE: "timeline",
-        }.get(classified.intent, "standard")
+        }.get(intent, "standard")
         response_text = inject_disclaimer(response_text, disclaimer_type)
-
         citation_block = format_citations(sources)
         if citation_block and citation_block not in response_text:
             response_text = response_text + citation_block
 
-        response = ChatResponse(
-            response=response_text,
-            intent=classified.intent.value,
-            confidence=classified.confidence,
-            model_used=llm_response.model_used,
+        convs.add_message(
+            self.db,
+            conversation,
+            role="assistant",
+            content=response_text,
+            provider=provider,
+            model=model,
+            intent=intent.value,
             sources=sources,
-            requires_lawyer=classified.requires_lawyer,
-            session_id=session.id,
+        )
+
+        return ChatResponse(
+            response=response_text,
+            intent=intent.value,
+            confidence=confidence,
+            model_used=model,
+            provider=provider,
+            sources=sources,
+            requires_lawyer=False,
+            conversation_id=conversation.id,
+            session_id=conversation.id,
             timestamp=datetime.utcnow(),
         )
-        self._save_message(
-            session,
-            "assistant",
-            response.response,
-            intent=response.intent,
-            model_used=response.model_used,
-            sources=sources,
-        )
-        return response

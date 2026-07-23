@@ -8,9 +8,11 @@ import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, chat, checklist, health, rfe, timeline
+from app.api import admin, auth, chat, checklist, conversations, health, rfe, timeline
+from app.api import settings as settings_api
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
+from app.core.logging_filters import install_redacting_filter
 from app.core.validation import validate_production_settings
 from app.db.init_db import init_db
 from app.middleware.request_id import RequestIDMiddleware
@@ -26,6 +28,7 @@ log_format = (
     else '{"time":"%(asctime)s","name":"%(name)s","level":"%(levelname)s","message":"%(message)s"}'
 )
 logging.basicConfig(level=log_level, format=log_format, stream=sys.stdout)
+install_redacting_filter()
 logger = logging.getLogger(__name__)
 
 
@@ -72,7 +75,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
 
@@ -84,6 +87,8 @@ def create_app() -> FastAPI:
     app.include_router(timeline.router, prefix="/api/v1", tags=["Timeline"])
     app.include_router(rfe.router, prefix="/api/v1", tags=["RFE"])
     app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(settings_api.router, prefix="/api/v1")
+    app.include_router(conversations.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
 
     @app.get("/")
