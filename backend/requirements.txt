@@ -23,6 +23,7 @@ lxml==5.3.0
 # ----- Database -----
 sqlalchemy==2.0.36
 alembic==1.14.0
+psycopg[binary]==3.2.3
 
 # ----- Auth / Crypto -----
 cryptography==44.0.0

@@ -7,3 +7,5 @@ scrape_configs:
     static_configs:
       - targets: ["backend:8000"]
     metrics_path: /metrics
+    # When METRICS_REQUIRE_ADMIN=true, set admin key via prometheus bearer/authorization.
+    # Default prod compose sets METRICS_REQUIRE_ADMIN=false so internal scrape works.

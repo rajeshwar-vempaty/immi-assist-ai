@@ -1,33 +1,13 @@
 version: "3.8"
 
-# Production stack with Postgres (recommended).
-# For a SQLite pilot only, set ALLOW_SQLITE_IN_PRODUCTION=true and use
-# docker-compose.prod.sqlite.yml instead, with UVICORN_WORKERS=1.
+# SQLite pilot stack — single worker only.
+# Prefer docker-compose.prod.yml (Postgres) for real traffic.
 
 networks:
   immi_net:
     driver: bridge
 
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-immi}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-immi_assist}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - immi_net
-    expose:
-      - "5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-immi} -d ${POSTGRES_DB:-immi_assist}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
   backend:
     build:
       context: .
@@ -38,21 +18,20 @@ services:
       - APP_ENV=production
       - DEBUG=false
       - AUTH_DEV_MODE=false
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-immi}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-immi_assist}
+      - ALLOW_SQLITE_IN_PRODUCTION=true
+      - DATABASE_URL=sqlite:////app/data/immi_assist.db
       - CHROMA_PERSIST_DIR=/app/data/chroma_db
       - RUN_INGEST_ON_START=${RUN_INGEST_ON_START:-true}
       - METRICS_ENABLED=true
       - METRICS_REQUIRE_ADMIN=false
-      - UVICORN_WORKERS=${UVICORN_WORKERS:-2}
+      - UVICORN_WORKERS=1
     volumes:
       - chroma_data:/app/data/chroma_db
+      - sqlite_data:/app/data
     networks:
       - immi_net
     expose:
       - "8000"
-    depends_on:
-      db:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/ready"]
       interval: 30s
@@ -104,38 +83,20 @@ services:
     environment:
       - INGEST_INTERVAL_HOURS=${INGEST_INTERVAL_HOURS:-168}
       - RUN_REFRESH_ON_START=false
-      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-immi}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-immi_assist}
+      - DATABASE_URL=sqlite:////app/data/immi_assist.db
       - CHROMA_PERSIST_DIR=/app/data/chroma_db
     volumes:
       - chroma_data:/app/data/chroma_db
+      - sqlite_data:/app/data
     networks:
       - immi_net
     depends_on:
       backend:
         condition: service_healthy
-      db:
-        condition: service_healthy
     restart: unless-stopped
-
-  # Prometheus is internal-only (no host port binding).
-  prometheus:
-    image: prom/prometheus:v2.55.1
-    volumes:
-      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    networks:
-      - immi_net
-    expose:
-      - "9090"
-    depends_on:
-      - backend
-    restart: unless-stopped
-    profiles:
-      - metrics
 
 volumes:
   chroma_data:
-  postgres_data:
+  sqlite_data:
   caddy_data:
   caddy_config:
-  prometheus_data:

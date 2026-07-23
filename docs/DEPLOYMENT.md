@@ -37,11 +37,10 @@ cd frontend && npm run dev
 
 ## API Authentication
 
-- **Anonymous**: Send `X-Session-ID` header (returned on first response) for rate limiting
-- **Registered**: `POST /api/v1/auth/register` with `X-Admin-Key` header (production default)
-- **Dev only**: Set `ALLOW_PUBLIC_REGISTRATION=true` for self-service free-tier keys (capped per IP)
-- **Key management**: `GET /auth/keys`, `POST /auth/keys`, `DELETE /auth/keys/{id}` (authenticated)
+- **Users**: Google sign-in (`POST /api/v1/auth/google`) or `AUTH_DEV_MODE` email login
+- **Session**: JWT httpOnly cookie + optional Bearer token
 - **Admin**: `POST /api/v1/admin/scrape`, `POST /api/v1/admin/ingest?scrape=true` with `X-Admin-Key`
+- See [AUTH.md](./AUTH.md) and [PRODUCTION.md](./PRODUCTION.md)
 
 ## Data Pipeline
 
@@ -65,41 +64,45 @@ Restores: copy `immi_assist.db` and `chroma_db/` back to `backend/` paths.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/v1/health/live` | Process alive |
-| `GET /api/v1/health/ready` | DB + KB ≥ `MIN_KNOWLEDGE_BASE_DOCUMENTS` + processing times |
+| `GET /api/v1/health/live` | Process alive (200) |
+| `GET /api/v1/health/ready` | DB + KB ready (**503** until ready) |
 | `GET /api/v1/health` | Legacy summary |
 
 ## Production (Docker)
 
+See **[PRODUCTION.md](./PRODUCTION.md)** for the full checklist.
+
 ```bash
 cp .env.example .env
-# Required: SECRET_KEY, ADMIN_API_KEY, LLM API keys
-# For public HTTPS deployment also set:
-#   SITE_ADDRESS=immiassist.yourdomain.com
-#   ACME_EMAIL=ops@yourdomain.com
-#   PUBLIC_API_URL=https://immiassist.yourdomain.com/api/v1
-#   CORS_ORIGINS=https://immiassist.yourdomain.com
+# Required: SECRET_KEY, ENCRYPTION_KEY, ADMIN_API_KEY, GOOGLE_CLIENT_ID,
+# AUTH_DEV_MODE=false, LLM keys, POSTGRES_PASSWORD, SITE_ADDRESS, ACME_EMAIL,
+# PUBLIC_API_URL, CORS_ORIGINS
 
-docker compose -f docker-compose.prod.yml up --build
+# Recommended (Postgres)
+docker compose -f docker-compose.prod.yml up --build -d
+
+# Pilot only (SQLite, 1 worker)
+docker compose -f docker-compose.prod.sqlite.yml up --build -d
 ```
 
 ### Architecture
 
 | Service | Role |
 |---------|------|
-| `caddy` | Reverse proxy, TLS (ports 80/443) |
+| `caddy` | Reverse proxy, TLS (ports 80/443); public `/api/*` + frontend only |
+| `db` | Postgres 16 (prod compose) |
 | `backend` | FastAPI API (internal) |
 | `frontend` | Next.js UI (internal) |
 | `scheduler` | Weekly scrape + ingest refresh |
-| `prometheus` | Metrics collection (port 9090) |
+| `prometheus` | Optional internal metrics (`--profile metrics`; no host port) |
 
-- App URL: `http://localhost` (local) or `https://$SITE_ADDRESS` (production)
-- API docs: `/docs` via Caddy
-- Metrics: `GET /metrics` (scraped by Prometheus)
+- App URL: `http://localhost` (local) or `https://$SITE_ADDRESS`
+- API docs: disabled in production (404 at edge)
+- Metrics: internal Docker network only
 
 ### Observability
 
-- **Prometheus**: http://localhost:9090 (targets `backend:8000/metrics`)
+- **Prometheus**: internal only (`docker compose --profile metrics up`); scrapes `backend:8000/metrics`
 - **Sentry**: set `SENTRY_DSN` in `.env` for error tracking
 - **LLM metrics**: `llm_requests_total`, `llm_request_duration_seconds`
 
@@ -109,7 +112,7 @@ The `scheduler` service runs `scripts/scheduled_refresh.py` every `INGEST_INTERV
 
 - Backend runs migrations on start
 - Set `RUN_INGEST_ON_START=true` to seed ChromaDB when empty
-- Volumes: `chroma_data`, `sqlite_data`, `caddy_data`, `prometheus_data`
+- Volumes: `chroma_data`, `postgres_data` (or `sqlite_data`), `caddy_data`, `prometheus_data`
 
 ## CI
 
