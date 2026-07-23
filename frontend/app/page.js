@@ -9,9 +9,12 @@ import {
   analyzeRFE,
   createChecklist,
   deleteConversation,
-  estimateTimeline,
   getConversation,
   getSettingsPreferences,
+  getUscisCategories,
+  getUscisForms,
+  getUscisOffices,
+  getUscisProcessingTime,
   listConversations,
   sendChatMessage,
   truncateConversation,
@@ -36,14 +39,210 @@ const VISA_TYPES = [
   "F1", "F1_OPT", "I485", "I130", "I140", "TN", "OTHER",
 ];
 
-const SERVICE_CENTERS = [
-  "California Service Center",
-  "Nebraska Service Center",
-  "Texas Service Center",
-  "Vermont Service Center",
-  "Potomac Service Center",
-  "National Benefits Center",
-];
+function UscisTimeline() {
+  const [forms, setForms] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [offices, setOffices] = useState([]);
+  const [form, setForm] = useState("");
+  const [category, setCategory] = useState("");
+  const [office, setOffice] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [stepLoading, setStepLoading] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getUscisForms()
+      .then((d) => setForms(d.forms || []))
+      .catch((e) => setError(e.message));
+  }, []);
+
+  const onFormChange = async (id) => {
+    setForm(id);
+    setCategory("");
+    setOffice("");
+    setCategories([]);
+    setOffices([]);
+    setResult(null);
+    setError("");
+    if (!id) return;
+    setStepLoading("categories");
+    try {
+      const d = await getUscisCategories(id);
+      setCategories(d.categories || []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setStepLoading("");
+    }
+  };
+
+  const onCategoryChange = async (id) => {
+    setCategory(id);
+    setOffice("");
+    setOffices([]);
+    setResult(null);
+    setError("");
+    if (!id) return;
+    setStepLoading("offices");
+    try {
+      const d = await getUscisOffices(form, id);
+      const list = d.offices || [];
+      setOffices(list);
+      if (list.length === 1) setOffice(list[0].id);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setStepLoading("");
+    }
+  };
+
+  const onGetTime = async () => {
+    if (!form || !category || !office || loading) return;
+    setLoading(true);
+    setError("");
+    setResult(null);
+    try {
+      setResult(await getUscisProcessingTime(form, category, office));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formDesc = forms.find((f) => f.id === form)?.description || "";
+  const officeDesc = offices.find((o) => o.id === office)?.description || office;
+
+  return (
+    <section className="panel-stack pt-panel">
+      <h2 className="section-title">Case processing times</h2>
+      <p className="pt-sub">
+        The same lookup USCIS offers on{" "}
+        <a href="https://egov.uscis.gov/processing-times/" target="_blank" rel="noopener noreferrer">
+          egov.uscis.gov/processing-times
+        </a>
+        : pick a form, category, and office to see how long 80% of cases take.
+      </p>
+
+      <label className="pt-field">
+        <span>
+          Form <em aria-hidden="true">*</em>
+        </span>
+        <select className="select" value={form} onChange={(e) => onFormChange(e.target.value)}>
+          <option value="">Select a form…</option>
+          {forms.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.id} | {f.description}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="pt-field">
+        <span>
+          Form Category <em aria-hidden="true">*</em>
+        </span>
+        <select
+          className="select"
+          value={category}
+          onChange={(e) => onCategoryChange(e.target.value)}
+          disabled={!form || stepLoading === "categories"}
+        >
+          <option value="">
+            {stepLoading === "categories" ? "Loading categories…" : "Select a category…"}
+          </option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.description}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="pt-field">
+        <span>
+          Field Office or Service Center <em aria-hidden="true">*</em>
+        </span>
+        <select
+          className="select"
+          value={office}
+          onChange={(e) => {
+            setOffice(e.target.value);
+            setResult(null);
+          }}
+          disabled={!category || stepLoading === "offices"}
+        >
+          <option value="">
+            {stepLoading === "offices" ? "Loading offices…" : "Select an office…"}
+          </option>
+          {offices.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.description}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div>
+        <button
+          className="btn btn-primary"
+          onClick={onGetTime}
+          disabled={!form || !category || !office || loading}
+        >
+          {loading ? "Checking…" : "Get processing time"}
+        </button>
+      </div>
+
+      {error ? <p className="pt-error">{error}</p> : null}
+
+      {result && (
+        <div className="pt-result">
+          <h3 className="pt-result-title">
+            Processing time for {formDesc} ({result.form}) at {officeDesc}
+          </h3>
+          {result.months != null ? (
+            <div className="pt-card">
+              <div className="pt-card-head">80% of cases are completed within</div>
+              <div className="pt-card-value">
+                <strong>{result.months}</strong>
+                <span>Months</span>
+              </div>
+            </div>
+          ) : (
+            <p className="pt-error">
+              No published figure for this combination.{" "}
+              <a href={result.uscis_url} target="_blank" rel="noopener noreferrer">
+                Check directly on USCIS
+              </a>
+              .
+            </p>
+          )}
+          <p className={`pt-source ${result.source === "live" ? "live" : "cached"}`}>
+            {result.source === "live" ? (
+              <>
+                Live data from{" "}
+                <a href={result.uscis_url} target="_blank" rel="noopener noreferrer">
+                  egov.uscis.gov
+                </a>
+                {result.publication_date ? ` — published ${result.publication_date}` : ""}
+              </>
+            ) : (
+              <>
+                Cached USCIS figures (as of {result.as_of}) — the live USCIS service could not be
+                reached from this server. Verify on{" "}
+                <a href={result.uscis_url} target="_blank" rel="noopener noreferrer">
+                  egov.uscis.gov
+                </a>
+                .
+              </>
+            )}
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
 
 const markdownComponents = {
   a: ({ node, ...props }) => (
@@ -149,10 +348,6 @@ export default function Home() {
   const [visaType, setVisaType] = useState("H1B");
   const [checklistDetails, setChecklistDetails] = useState("");
   const [checklistResult, setChecklistResult] = useState(null);
-  const [formType, setFormType] = useState("I-129");
-  const [serviceCenter, setServiceCenter] = useState(SERVICE_CENTERS[0]);
-  const [filingDate, setFilingDate] = useState("");
-  const [timelineResult, setTimelineResult] = useState(null);
   const [rfeText, setRfeText] = useState("");
   const [rfeResult, setRfeResult] = useState(null);
 
@@ -388,24 +583,6 @@ export default function Home() {
     try {
       setChecklistResult(
         await createChecklist({ visa_type: visaType, details: checklistDetails })
-      );
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setToolLoading(false);
-    }
-  };
-
-  const handleTimeline = async () => {
-    setToolLoading(true);
-    setError(null);
-    try {
-      setTimelineResult(
-        await estimateTimeline({
-          form_type: formType,
-          service_center: serviceCenter,
-          filing_date: filingDate || null,
-        })
       );
     } catch (err) {
       setError(err.message);
@@ -759,27 +936,7 @@ export default function Home() {
             </section>
           )}
 
-          {tab === "timeline" && (
-            <section className="panel-stack">
-              <h2 className="section-title">Processing timeline</h2>
-              <input className="field" value={formType} onChange={(e) => setFormType(e.target.value)} />
-              <select className="select" value={serviceCenter} onChange={(e) => setServiceCenter(e.target.value)}>
-                {SERVICE_CENTERS.map((sc) => (
-                  <option key={sc} value={sc}>{sc}</option>
-                ))}
-              </select>
-              <input className="field" type="date" value={filingDate} onChange={(e) => setFilingDate(e.target.value)} />
-              <button className="btn btn-primary" onClick={handleTimeline} disabled={toolLoading}>
-                {toolLoading && tab === "timeline" ? "Estimating…" : "Estimate timeline"}
-              </button>
-              {timelineResult && (
-                <div className="result-block">
-                  <h3>{timelineResult.form_type}</h3>
-                  <p>{timelineResult.status_explanation}</p>
-                </div>
-              )}
-            </section>
-          )}
+          {tab === "timeline" && <UscisTimeline />}
 
           {tab === "rfe" && (
             <section className="panel-stack">
