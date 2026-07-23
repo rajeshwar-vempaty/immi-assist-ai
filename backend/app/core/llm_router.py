@@ -154,18 +154,33 @@ class LLMRouter:
         """Keyword-based fallback classifier."""
         message_lower = message.lower()
 
+        visa_type = None
+        for token in (
+            "h-1b", "h1b", "h4", "l-1a", "l1a", "l-1b", "l1b", "o-1", "o1",
+            "eb-1", "eb1", "eb-2", "eb2", "eb-3", "eb3", "niw", "f-1", "f1",
+            "opt", "i-485", "i485", "i-140", "i140", "i-129", "i129",
+        ):
+            if token in message_lower.replace(" ", ""):
+                visa_type = token.upper().replace("-", "")
+                if visa_type == "H1B":
+                    visa_type = "H1B"
+                break
+            if token in message_lower:
+                visa_type = token.upper()
+                break
+
         if any(kw in message_lower for kw in ["rfe", "request for evidence", "denial", "noid"]):
-            return ClassifiedIntent(Intent.RFE_HELP, 0.7, "RFE related")
+            return ClassifiedIntent(Intent.RFE_HELP, 0.7, "RFE related", visa_type=visa_type)
         elif any(kw in message_lower for kw in ["documents", "checklist", "what do i need", "paperwork", "required"]):
-            return ClassifiedIntent(Intent.CHECKLIST, 0.7, "Document checklist")
-        elif any(kw in message_lower for kw in ["how long", "processing time", "timeline", "wait", "when will"]):
-            return ClassifiedIntent(Intent.TIMELINE, 0.7, "Processing timeline")
+            return ClassifiedIntent(Intent.CHECKLIST, 0.7, "Document checklist", visa_type=visa_type)
+        elif any(kw in message_lower for kw in ["how long", "processing time", "timeline", "timelines", "wait", "when will", "approval"]):
+            return ClassifiedIntent(Intent.TIMELINE, 0.7, "Processing timeline", visa_type=visa_type)
         elif any(kw in message_lower for kw in ["my case", "my application", "my receipt"]):
-            return ClassifiedIntent(Intent.CASE_SPECIFIC, 0.6, "Case specific")
+            return ClassifiedIntent(Intent.CASE_SPECIFIC, 0.6, "Case specific", visa_type=visa_type)
         elif any(kw in message_lower for kw in ["hello", "hi", "hey", "thanks", "thank you"]):
             return ClassifiedIntent(Intent.GENERAL, 0.9, "Greeting")
         else:
-            return ClassifiedIntent(Intent.POLICY_QA, 0.6, "General immigration question")
+            return ClassifiedIntent(Intent.POLICY_QA, 0.6, "General immigration question", visa_type=visa_type)
 
     # ----- LLM Calls -----
 
