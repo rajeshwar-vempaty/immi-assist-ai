@@ -1,5 +1,5 @@
 """
-System prompts for each LLM role in the ImmiAssist pipeline.
+System prompts for each LLM role in the Beacon pipeline.
 These are the "brains" of each specialized agent.
 """
 

@@ -272,7 +272,7 @@ def ingest_data(force: bool = False, collection: str = "all"):
     from app.services.rag_service import get_rag_service
 
     logger.info("=" * 60)
-    logger.info("ImmiAssist AI — Data Ingestion Pipeline")
+    logger.info("Beacon — Data Ingestion Pipeline")
     logger.info("=" * 60)
 
     rag = get_rag_service()

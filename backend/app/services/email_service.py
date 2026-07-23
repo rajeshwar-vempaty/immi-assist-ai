@@ -10,11 +10,11 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-WELCOME_SUBJECT = "Welcome to ImmiAssist — what this tool does for you"
+WELCOME_SUBJECT = "Welcome to Beacon — what this tool does for you"
 
 WELCOME_BODY = """Hi {name},
 
-Thanks for creating an ImmiAssist account with {email}.
+Thanks for creating a Beacon account with {email}.
 
 Here is a short summary of what this tool helps you do:
 
@@ -26,13 +26,13 @@ Here is a short summary of what this tool helps you do:
 • Save your own AI provider API keys securely and choose which model to use in chat
 • Keep your conversation history private to your account
 
-Important: ImmiAssist is an informational assistant — not a lawyer and not a substitute
+Important: Beacon is an informational assistant — not a lawyer and not a substitute
 for licensed immigration counsel. Always verify critical decisions with official USCIS
 sources or a qualified attorney.
 
 Get started: open the app, add an API key under Settings (if needed), and ask your first question.
 
-— The ImmiAssist team
+— The Beacon team
 """
 
 

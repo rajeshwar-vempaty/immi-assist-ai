@@ -2,7 +2,7 @@
 
 ## Overview
 
-ImmiAssist uses **Google Identity Services** for sign-in (plus optional `AUTH_DEV_MODE` email login for local development). Sessions are JWTs delivered as an httpOnly cookie (`immi_session`) and optionally mirrored in `sessionStorage` for `Authorization: Bearer` calls.
+Beacon uses **Google Identity Services** for sign-in (plus optional `AUTH_DEV_MODE` email login for local development). Sessions are JWTs delivered as an httpOnly cookie (`immi_session`) and optionally mirrored in `sessionStorage` for `Authorization: Bearer` calls.
 
 Provider API keys (OpenAI, Anthropic, Gemini, Groq) are stored **encrypted at rest** in SQLite and never returned in full to the browser.
 

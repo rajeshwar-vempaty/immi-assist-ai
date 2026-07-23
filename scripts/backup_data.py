@@ -43,7 +43,7 @@ def backup(output_dir: Path, db_path: Path, chroma_path: Path) -> Path:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Backup ImmiAssist data")
+    parser = argparse.ArgumentParser(description="Backup Beacon data")
     parser.add_argument("--output", default=str(REPO_ROOT / "backups"))
     parser.add_argument("--db", default=str(DEFAULT_DB))
     parser.add_argument("--chroma", default=str(DEFAULT_CHROMA))

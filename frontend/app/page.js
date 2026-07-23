@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "../lib/auth";
+import ChatThinking from "../components/ChatThinking";
 import {
   analyzeRFE,
   createChecklist,
@@ -293,9 +294,9 @@ export default function Home() {
     <div className="app-shell">
       <aside className={`history-panel ${historyOpen ? "open-mobile" : ""}`}>
         <div className="brand-mark">
-          <div className="mark">IA</div>
+          <div className="mark">Be</div>
           <div>
-            <h1>ImmiAssist</h1>
+            <h1>Beacon</h1>
             <p>Immigration guidance</p>
           </div>
         </div>
@@ -478,11 +479,7 @@ export default function Home() {
                       )}
                     </div>
                   ))}
-                  {isLoading && (
-                    <div className="bubble assistant" style={{ color: "var(--muted)" }}>
-                      Researching…
-                    </div>
-                  )}
+                  {isLoading && <ChatThinking />}
                   <div ref={messagesEndRef} />
                 </div>
               )}
