@@ -472,17 +472,18 @@ const JOURNEY_RENDERERS = {
 };
 
 function JourneyVisual() {
-  // Pick synchronously on the client so the scene is present on first paint (no empty flash).
-  const [visual] = useState(() =>
-    readClientPick(JOURNEY_VISUALS, {
-      param: "visual",
-      lastKey: "immi_login_visual_id",
-      onceKey: "immi_login_visual_once",
-    })
-  );
+  // Stable default for SSR + first client paint; rotate after mount to avoid hydration mismatch.
+  const [visual, setVisual] = useState(JOURNEY_VISUALS[0]);
   const [animated, setAnimated] = useState(false);
 
   useEffect(() => {
+    setVisual(
+      readClientPick(JOURNEY_VISUALS, {
+        param: "visual",
+        lastKey: "immi_login_visual_id",
+        onceKey: "immi_login_visual_once",
+      })
+    );
     const timer = window.setTimeout(() => setAnimated(true), 80);
     return () => window.clearTimeout(timer);
   }, []);
@@ -493,7 +494,6 @@ function JourneyVisual() {
     <aside
       className={`login-visual login-visual-${visual.id} ${animated ? "is-animated" : ""}`}
       aria-hidden="true"
-      suppressHydrationWarning
     >
       <Renderer visual={visual} />
     </aside>
@@ -513,18 +513,22 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [heroCopy] = useState(() =>
-    readClientPick(LOGIN_HERO_COPY, {
-      param: "hero",
-      lastKey: "immi_login_hero_id",
-      onceKey: "immi_login_hero_once",
-    })
-  );
+  const [heroCopy, setHeroCopy] = useState(LOGIN_HERO_COPY[0]);
 
   useEffect(() => {
     getAuthConfig()
       .then(setConfig)
       .catch(() => setConfig({ google_client_id: null, password_auth_enabled: true }));
+  }, []);
+
+  useEffect(() => {
+    setHeroCopy(
+      readClientPick(LOGIN_HERO_COPY, {
+        param: "hero",
+        lastKey: "immi_login_hero_id",
+        onceKey: "immi_login_hero_once",
+      })
+    );
   }, []);
 
   useEffect(() => {
