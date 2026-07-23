@@ -1,7 +1,7 @@
-"""Authentication — Google sign-in, session JWT, profile."""
+"""Authentication — Google, email/password register+login, session JWT."""
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -15,6 +15,7 @@ from app.services.google_auth import (
     upsert_google_user,
     verify_google_id_token,
 )
+from app.services.password_auth import login_password_user, register_password_user
 from app.services.usage_service import count_usage_last_24h, get_daily_limit
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -27,6 +28,17 @@ class GoogleLoginRequest(BaseModel):
 class DevLoginRequest(BaseModel):
     email: str = Field(..., min_length=3)
     name: str | None = None
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=2, max_length=80)
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class PasswordLoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
 
 
 class AuthUserResponse(BaseModel):
@@ -44,6 +56,7 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: AuthUserResponse
+    welcome_email: dict | None = None
 
 
 def _user_response(db: Session, user: User, auth: AuthContext | None = None) -> AuthUserResponse:
@@ -85,15 +98,47 @@ def login_with_google(
     return LoginResponse(access_token=token, user=_user_response(db, user))
 
 
+@router.post("/register", response_model=LoginResponse)
+def register(
+    body: RegisterRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    user, token, email_result = register_password_user(
+        db,
+        username=body.username,
+        email=str(body.email),
+        password=body.password,
+    )
+    _set_session_cookie(response, token)
+    return LoginResponse(
+        access_token=token,
+        user=_user_response(db, user),
+        welcome_email=email_result,
+    )
+
+
+@router.post("/login", response_model=LoginResponse)
+def login_with_password(
+    body: PasswordLoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    user, token = login_password_user(db, email=str(body.email), password=body.password)
+    _set_session_cookie(response, token)
+    return LoginResponse(access_token=token, user=_user_response(db, user))
+
+
 @router.post("/dev-login", response_model=LoginResponse)
 def login_dev(
     body: DevLoginRequest,
     response: Response,
     db: Session = Depends(get_db),
 ):
+    """Internal/test-only login. Not shown in the UI."""
     settings = get_settings()
     if not settings.auth_dev_mode:
-        raise AuthError("Dev login is disabled. Use Google sign-in.", status_code=403)
+        raise AuthError("Dev login is disabled. Use Google or email/password.", status_code=403)
     user = upsert_dev_user(db, body.email, body.name)
     token = issue_session_token(user)
     _set_session_cookie(response, token)
@@ -122,5 +167,6 @@ def auth_config():
     settings = get_settings()
     return {
         "google_client_id": settings.google_client_id or None,
+        "password_auth_enabled": True,
         "auth_dev_mode": settings.auth_dev_mode,
     }

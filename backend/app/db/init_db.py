@@ -31,5 +31,6 @@ def init_db() -> None:
     _add_column_if_missing("users", "name", "name VARCHAR(255)")
     _add_column_if_missing("users", "picture", "picture TEXT")
     _add_column_if_missing("users", "google_sub", "google_sub VARCHAR(255)")
+    _add_column_if_missing("users", "password_hash", "password_hash VARCHAR(255)")
     _add_column_if_missing("users", "updated_at", "updated_at DATETIME")
     logger.info("Database tables initialized")

@@ -30,14 +30,10 @@ cryptography==44.0.0
 python-jose[cryptography]==3.3.0
 google-auth==2.37.0
 
-# ----- Auth / Crypto -----
-cryptography==44.0.0
-python-jose[cryptography]==3.3.0
-google-auth==2.37.0
-
 # ----- Utilities -----
 pydantic==2.10.4
 pydantic-settings==2.7.1
+email-validator==2.2.0
 python-dotenv==1.0.1
 tiktoken==0.8.0
 

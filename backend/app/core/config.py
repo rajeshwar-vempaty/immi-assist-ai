@@ -30,8 +30,18 @@ class Settings(BaseSettings):
 
     # Google OAuth (Identity Services client ID)
     google_client_id: str = ""
-    # Dev-only: allow email/name login without Google token
+    # Dev-only: allow email/name login without Google token (API only; UI removed)
     auth_dev_mode: bool = False
+
+    # SMTP for welcome emails on registration (optional in development)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = "noreply@immiassist.local"
+    smtp_use_tls: bool = True
+    # When SMTP is unset, log welcome emails instead of sending (dev)
+    email_log_only: bool = True
 
     # Platform/fallback LLM API Keys (embeddings / optional system fallback)
     openai_api_key: str = ""

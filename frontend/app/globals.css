@@ -611,6 +611,49 @@ a {
   line-height: 1.5;
 }
 
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.auth-tab {
+  border: 0;
+  background: transparent;
+  border-radius: 9px;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.auth-tab.active {
+  background: var(--sea);
+  color: #fff;
+  font-weight: 600;
+}
+
 .settings-shell {
   min-height: 100vh;
 }
