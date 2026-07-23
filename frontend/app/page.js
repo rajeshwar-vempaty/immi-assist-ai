@@ -45,6 +45,39 @@ const SERVICE_CENTERS = [
   "National Benefits Center",
 ];
 
+const markdownComponents = {
+  a: ({ node, ...props }) => (
+    <a {...props} target="_blank" rel="noopener noreferrer" />
+  ),
+};
+
+function SourceChips({ sources }) {
+  return (
+    <div className="sources">
+      {sources.slice(0, 4).map((s, j) => {
+        const label = typeof s === "string" ? s : s?.label || "Source";
+        const url = typeof s === "string" ? "" : s?.url || "";
+        return url ? (
+          <a
+            key={j}
+            className="source-chip source-link"
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={url}
+          >
+            {label}
+          </a>
+        ) : (
+          <span key={j} className="source-chip">
+            {label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function SidebarIcon() {
   return (
     <svg
@@ -644,18 +677,14 @@ export default function Home() {
                         <>
                           <div className={`bubble ${msg.role}`}>
                             {msg.role === "assistant" ? (
-                              <ReactMarkdown>{msg.content}</ReactMarkdown>
+                              <ReactMarkdown components={markdownComponents}>
+                                {msg.content}
+                              </ReactMarkdown>
                             ) : (
                               msg.content
                             )}
                             {msg.meta?.sources?.length > 0 && (
-                              <div className="sources">
-                                {msg.meta.sources.slice(0, 4).map((s, j) => (
-                                  <span key={j} className="source-chip">
-                                    {s}
-                                  </span>
-                                ))}
-                              </div>
+                              <SourceChips sources={msg.meta.sources} />
                             )}
                           </div>
                           <div className="msg-actions">
@@ -774,7 +803,7 @@ export default function Home() {
               ) : null}
               {rfeResult && (
                 <div className="result-block">
-                  <ReactMarkdown>{rfeResult.summary}</ReactMarkdown>
+                  <ReactMarkdown components={markdownComponents}>{rfeResult.summary}</ReactMarkdown>
                 </div>
               )}
             </section>

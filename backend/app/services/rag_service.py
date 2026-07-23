@@ -148,18 +148,19 @@ class RAGService:
         logger.info(f"Retrieved {len(retrieved)} documents for query: {query[:80]}...")
         return retrieved
 
-    def format_context(self, retrieved_docs: list[dict]) -> tuple[str, list[str]]:
+    def format_context(self, retrieved_docs: list[dict]) -> tuple[str, list[dict]]:
         """
         Format retrieved documents into context string + source list.
 
         Returns:
-            (context_string, list_of_source_names)
+            (context_string, list of {"label", "url"} source refs)
         """
         if not retrieved_docs:
             return "No relevant context found in the knowledge base.", []
 
         context_parts = []
         sources = []
+        seen_labels = set()
 
         for i, doc in enumerate(retrieved_docs, 1):
             source_name = doc["metadata"].get("source", "USCIS Document")
@@ -170,7 +171,11 @@ class RAGService:
             context_parts.append(
                 f"{inline}\n{doc['document']}\n"
             )
-            sources.append(source_label)
+            if source_label not in seen_labels:
+                seen_labels.add(source_label)
+                sources.append(
+                    {"label": source_label, "url": doc["metadata"].get("url", "") or ""}
+                )
 
         context = "\n---\n".join(context_parts)
         return context, sources

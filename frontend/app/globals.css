@@ -698,6 +698,26 @@ a {
   color: var(--sea-deep);
 }
 
+a.source-chip.source-link {
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+a.source-chip.source-link:hover {
+  background: rgba(31, 111, 106, 0.2);
+  text-decoration: underline;
+}
+
+.bubble.assistant a {
+  color: var(--sea-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.bubble.assistant a:hover {
+  color: var(--sea);
+}
+
 .composer {
   flex-shrink: 0;
   padding: 10px 20px 18px;
