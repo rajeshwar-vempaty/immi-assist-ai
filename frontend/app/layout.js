@@ -2,7 +2,7 @@ import "./globals.css";
 import { AuthProvider } from "../lib/auth";
 
 export const metadata = {
-  title: "ImmiAssist AI — Immigration Assistant",
+  title: "Beacon — Immigration guidance",
   description:
     "Clear immigration guidance with checklists, timelines, and RFE help grounded in USCIS sources.",
 };

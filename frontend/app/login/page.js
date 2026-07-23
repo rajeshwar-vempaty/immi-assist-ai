@@ -193,7 +193,7 @@ function JourneyVisualOrbit({ visual }) {
       <div className="orbit orbit-a" />
       <div className="orbit orbit-b" />
       <div className="passport-card">
-        <div className="passport-stamp">IA</div>
+        <div className="passport-stamp">Be</div>
         <p>{visual.status}</p>
         <h3>{visual.title}</h3>
         <ul>
@@ -216,7 +216,7 @@ function JourneyVisualTimeline({ visual }) {
     <div className="login-visual-scene visual-timeline">
       <div className="timeline-rail" />
       <div className="timeline-panel">
-        <div className="passport-stamp">IA</div>
+        <div className="passport-stamp">Be</div>
         <p>{visual.status}</p>
         <h3>{visual.title}</h3>
         <ol className="timeline-steps">
@@ -244,7 +244,7 @@ function JourneyVisualDossier({ visual }) {
         <div className="dossier-sheet sheet-back" />
         <div className="dossier-sheet sheet-mid" />
         <div className="dossier-sheet sheet-front">
-          <div className="passport-stamp">IA</div>
+          <div className="passport-stamp">Be</div>
           <p>{visual.status}</p>
           <h3>{visual.title}</h3>
           <ul>
@@ -276,7 +276,7 @@ function JourneyVisualRoute({ visual }) {
         <circle className="route-node route-node-end" cx="320" cy="80" r="7" />
       </svg>
       <div className="route-card">
-        <div className="passport-stamp">IA</div>
+        <div className="passport-stamp">Be</div>
         <p>{visual.status}</p>
         <h3>{visual.title}</h3>
         <ul>
@@ -300,7 +300,7 @@ function JourneyVisualHorizon({ visual }) {
       <div className="horizon-glow" />
       <div className="horizon-line" />
       <div className="horizon-card">
-        <div className="passport-stamp">IA</div>
+        <div className="passport-stamp">Be</div>
         <p>{visual.status}</p>
         <h3>{visual.title}</h3>
         <ul>
@@ -501,9 +501,9 @@ export default function LoginPage() {
       <div className="login-panel">
         <header className="login-panel-header">
           <div className="brand-mark brand-mark-lg">
-            <div className="mark">IA</div>
+            <div className="mark">Be</div>
             <div>
-              <h1>ImmiAssist</h1>
+              <h1>Beacon</h1>
               <p>Immigration guidance</p>
             </div>
           </div>
@@ -642,8 +642,8 @@ export default function LoginPage() {
             {showEmail
               ? mode === "register"
                 ? "Already have an account?"
-                : "New to ImmiAssist?"
-              : "New to ImmiAssist?"}{" "}
+                : "New to Beacon?"
+              : "New to Beacon?"}{" "}
             <button
               type="button"
               className="text-link"

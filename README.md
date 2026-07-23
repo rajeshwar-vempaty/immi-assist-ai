@@ -1,4 +1,4 @@
-# 🇺🇸 ImmiAssist AI — Intelligent Immigration Assistant
+# Beacon — Intelligent Immigration Assistant
 
 An AI-powered platform that provides affordable, accurate, 24/7 immigration guidance using multi-LLM orchestration and RAG (Retrieval-Augmented Generation) over official USCIS sources.
 

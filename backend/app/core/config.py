@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # App
-    app_name: str = "ImmiAssist AI"
+    app_name: str = "Beacon"
     app_env: str = "development"
     debug: bool = True
     secret_key: str = "change-this-in-production"

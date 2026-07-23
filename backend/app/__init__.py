@@ -1,1 +1,1 @@
-"""ImmiAssist AI backend application."""
+"""Beacon backend application."""

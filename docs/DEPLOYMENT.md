@@ -1,4 +1,4 @@
-# ImmiAssist AI — Deployment Guide
+# Beacon — Deployment Guide
 
 ## Prerequisites
 

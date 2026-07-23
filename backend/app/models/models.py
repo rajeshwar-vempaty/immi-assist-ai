@@ -1,5 +1,5 @@
 """
-SQLAlchemy ORM models for ImmiAssist AI.
+SQLAlchemy ORM models for Beacon.
 """
 
 import uuid

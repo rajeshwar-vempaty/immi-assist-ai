@@ -294,9 +294,9 @@ export default function Home() {
     <div className="app-shell">
       <aside className={`history-panel ${historyOpen ? "open-mobile" : ""}`}>
         <div className="brand-mark">
-          <div className="mark">IA</div>
+          <div className="mark">Be</div>
           <div>
-            <h1>ImmiAssist</h1>
+            <h1>Beacon</h1>
             <p>Immigration guidance</p>
           </div>
         </div>

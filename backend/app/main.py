@@ -1,5 +1,5 @@
 """
-ImmiAssist AI — FastAPI Application Entry Point
+Beacon — FastAPI Application Entry Point
 """
 
 import logging
@@ -62,11 +62,11 @@ def create_app() -> FastAPI:
             logger.info("All API keys configured")
 
         yield
-        logger.info("Shutting down ImmiAssist AI")
+        logger.info("Shutting down Beacon")
 
     docs_on = _docs_enabled()
     app = FastAPI(
-        title="ImmiAssist AI",
+        title="Beacon",
         description=(
             "AI-powered immigration guidance platform using multi-LLM orchestration "
             "and RAG over official USCIS sources."
