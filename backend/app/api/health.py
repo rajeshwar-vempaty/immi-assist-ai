@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -35,8 +36,7 @@ async def readiness(db: Session = Depends(get_db)):
 
     kb_ok = policy_count >= min_docs and timeline_count > 0
     ready = db_ok and kb_ok
-
-    return {
+    payload = {
         "status": "ready" if ready else "not_ready",
         "database": "ok" if db_ok else "error",
         "knowledge_base_documents": policy_count,
@@ -44,6 +44,9 @@ async def readiness(db: Session = Depends(get_db)):
         "min_required_documents": min_docs,
         "timestamp": datetime.utcnow().isoformat(),
     }
+    if not ready:
+        return JSONResponse(status_code=503, content=payload)
+    return payload
 
 
 @router.get("/health")

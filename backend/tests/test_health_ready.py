@@ -11,7 +11,7 @@ def test_readiness_not_ready_low_docs(mock_rag, client):
     mock_rag.return_value = mock_service
 
     response = client.get("/api/v1/health/ready")
-    assert response.status_code == 200
+    assert response.status_code == 503
     data = response.json()
     assert data["status"] == "not_ready"
     assert data["knowledge_base_documents"] == 2

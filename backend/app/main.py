@@ -5,7 +5,7 @@ ImmiAssist AI — FastAPI Application Entry Point
 import logging
 import sys
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, auth, chat, checklist, conversations, health, rfe, timeline
@@ -30,6 +30,12 @@ log_format = (
 logging.basicConfig(level=log_level, format=log_format, stream=sys.stdout)
 install_redacting_filter()
 logger = logging.getLogger(__name__)
+
+
+def _docs_enabled() -> bool:
+    if settings.expose_api_docs is not None:
+        return settings.expose_api_docs
+    return settings.app_env != "production"
 
 
 def create_app() -> FastAPI:
@@ -58,6 +64,7 @@ def create_app() -> FastAPI:
         yield
         logger.info("Shutting down ImmiAssist AI")
 
+    docs_on = _docs_enabled()
     app = FastAPI(
         title="ImmiAssist AI",
         description=(
@@ -66,6 +73,9 @@ def create_app() -> FastAPI:
         ),
         version="1.0.0",
         lifespan=lifespan,
+        docs_url="/docs" if docs_on else None,
+        redoc_url="/redoc" if docs_on else None,
+        openapi_url="/openapi.json" if docs_on else None,
     )
 
     app.add_middleware(RequestIDMiddleware)
@@ -93,15 +103,28 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def root():
-        return {
+        payload = {
             "name": settings.app_name,
             "version": "1.0.0",
             "status": "running",
-            "docs": "/docs",
         }
+        if docs_on:
+            payload["docs"] = "/docs"
+        return payload
 
     if settings.metrics_enabled:
-        app.add_api_route("/metrics", metrics_endpoint, methods=["GET"], include_in_schema=False)
+        if settings.metrics_require_admin:
+
+            async def _metrics(
+                x_admin_key: str | None = Header(None, alias="X-Admin-Key"),
+            ):
+                if not settings.admin_api_key or x_admin_key != settings.admin_api_key:
+                    raise HTTPException(status_code=403, detail="Metrics require admin key")
+                return metrics_endpoint()
+
+            app.add_api_route("/metrics", _metrics, methods=["GET"], include_in_schema=False)
+        else:
+            app.add_api_route("/metrics", metrics_endpoint, methods=["GET"], include_in_schema=False)
 
     return app
 

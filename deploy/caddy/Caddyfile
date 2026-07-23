@@ -3,6 +3,9 @@
 # SITE_ADDRESS examples:
 #   :80                  → HTTP only (local)
 #   immiassist.example.com → automatic HTTPS
+#
+# Publicly exposed: frontend + /api/* only.
+# /docs, /redoc, /openapi.json, /metrics are NOT proxied (internal-only).
 
 {
 	email {$ACME_EMAIL}
@@ -19,7 +22,13 @@
 		-Server
 	}
 
-	@backend path /api/* /docs /docs/* /openapi.json /redoc /metrics
+	# Block accidental public access to API docs / metrics via the edge
+	@blocked path /docs /docs/* /redoc /redoc/* /openapi.json /metrics
+	handle @blocked {
+		respond "Not found" 404
+	}
+
+	@backend path /api/*
 	handle @backend {
 		reverse_proxy backend:8000
 	}

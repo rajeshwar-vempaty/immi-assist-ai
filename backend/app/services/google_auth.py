@@ -34,6 +34,8 @@ def verify_google_id_token(id_token: str) -> dict:
             raise AuthError("Invalid Google token issuer.", status_code=401)
         if not claims.get("email"):
             raise AuthError("Google account email is required.", status_code=401)
+        if claims.get("email_verified") is not True:
+            raise AuthError("Google account email is not verified.", status_code=401)
         return claims
     except AuthError:
         raise

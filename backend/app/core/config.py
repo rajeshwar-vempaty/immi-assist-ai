@@ -46,6 +46,14 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "sqlite:///./immi_assist.db"
+    # Pilot escape hatch: SQLite in production requires single worker and backups
+    allow_sqlite_in_production: bool = False
+
+    # API surface
+    # When None: docs enabled outside production. Set EXPOSE_API_DOCS=true/false to override.
+    expose_api_docs: bool | None = None
+    # Require X-Admin-Key for /metrics. Keep false when Prometheus scrapes on the private network.
+    metrics_require_admin: bool = False
 
     # Vector Store — relative paths resolve against backend/
     chroma_persist_dir: str = "./data/chroma_db"
