@@ -44,17 +44,28 @@ const SERVICE_CENTERS = [
   "National Benefits Center",
 ];
 
-function formatTime(iso) {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
+function groupHistory(items) {
+  const buckets = [
+    { label: "Today", items: [] },
+    { label: "Yesterday", items: [] },
+    { label: "Previous 7 days", items: [] },
+    { label: "Previous 30 days", items: [] },
+    { label: "Older", items: [] },
+  ];
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const DAY = 86400000;
+  for (const item of items) {
+    const t = new Date(item.updated_at).getTime();
+    let idx = 4;
+    if (Number.isNaN(t)) idx = 4;
+    else if (t >= startOfToday) idx = 0;
+    else if (t >= startOfToday - DAY) idx = 1;
+    else if (t >= startOfToday - 7 * DAY) idx = 2;
+    else if (t >= startOfToday - 30 * DAY) idx = 3;
+    buckets[idx].items.push(item);
   }
+  return buckets.filter((b) => b.items.length > 0);
 }
 
 export default function Home() {
@@ -302,64 +313,91 @@ export default function Home() {
   return (
     <div className="app-shell">
       <aside className={`history-panel ${historyOpen ? "open-mobile" : ""}`}>
-        <div className="brand-mark">
-          <div className="mark">Be</div>
-          <div>
-            <h1>Beacon</h1>
-            <p>Immigration guidance</p>
+        <div className="sidebar-head">
+          <div className="brand-mark">
+            <div className="mark">Be</div>
+            <div>
+              <h1>Beacon</h1>
+              <p>Immigration guidance</p>
+            </div>
           </div>
-        </div>
-
-        <div className="history-actions">
-          <button className="btn btn-primary" style={{ flex: 1 }} onClick={startNewChat}>
-            New chat
-          </button>
           <button className="btn btn-ghost mobile-bar" onClick={() => setHistoryOpen(false)}>
             Close
           </button>
         </div>
 
+        <button type="button" className="sidebar-new-chat" onClick={startNewChat}>
+          <span className="sidebar-new-icon" aria-hidden="true">+</span>
+          New chat
+        </button>
+
         <div className="history-list">
-          {historyLoading && (
-            <p style={{ color: "var(--muted)", fontSize: "0.85rem", padding: "0 4px" }}>
-              Loading conversations…
-            </p>
-          )}
+          {historyLoading && <p className="history-empty">Loading conversations…</p>}
           {!historyLoading && history.length === 0 && (
-            <p style={{ color: "var(--muted)", fontSize: "0.85rem", padding: "0 4px" }}>
-              Your conversations will appear here.
-            </p>
+            <p className="history-empty">Your conversations will appear here.</p>
           )}
-          {history.map((item) => (
-            <div key={item.id} className="history-row">
-              <button
-                className={`history-item ${item.id === activeChatId ? "active" : ""}`}
-                onClick={() => openChat(item.id)}
-              >
-                <div className="title">{item.title}</div>
-                <div className="meta">{formatTime(item.updated_at)}</div>
-              </button>
-              <button
-                type="button"
-                className="history-delete"
-                title="Delete conversation"
-                aria-label={`Delete ${item.title}`}
-                onClick={async () => {
-                  if (!confirm("Delete this conversation?")) return;
-                  try {
-                    await deleteConversation(item.id);
-                    if (activeChatId === item.id) startNewChat();
-                    const convData = await listConversations();
-                    setHistory(convData.conversations || []);
-                  } catch (err) {
-                    setError(err.message || "Failed to delete conversation");
-                  }
-                }}
-              >
-                ×
-              </button>
+          {groupHistory(history).map((group) => (
+            <div key={group.label} className="history-group">
+              <p className="history-group-label">{group.label}</p>
+              {group.items.map((item) => (
+                <div key={item.id} className="history-row">
+                  <button
+                    className={`history-item ${item.id === activeChatId ? "active" : ""}`}
+                    onClick={() => openChat(item.id)}
+                    title={item.title}
+                  >
+                    <span className="title">{item.title}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="history-delete"
+                    title="Delete conversation"
+                    aria-label={`Delete ${item.title}`}
+                    onClick={async () => {
+                      if (!confirm("Delete this conversation?")) return;
+                      try {
+                        await deleteConversation(item.id);
+                        if (activeChatId === item.id) startNewChat();
+                        const convData = await listConversations();
+                        setHistory(convData.conversations || []);
+                      } catch (err) {
+                        setError(err.message || "Failed to delete conversation");
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
             </div>
           ))}
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="account-menu" ref={menuRef}>
+            <button className="user-chip sidebar-user" onClick={() => setMenuOpen((v) => !v)}>
+              {user.picture ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.picture} alt="" className="avatar-img" />
+              ) : (
+                <span className="avatar">{initials}</span>
+              )}
+              <span className="sidebar-user-meta">
+                <strong>{user.name || "Account"}</strong>
+                <small>{user.email}</small>
+              </span>
+            </button>
+            {menuOpen && (
+              <div className="menu-dropdown up">
+                <Link href="/settings" className="menu-item" onClick={() => setMenuOpen(false)}>
+                  Profile &amp; API keys
+                </Link>
+                <button className="menu-item" onClick={handleSignOut}>
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -418,28 +456,6 @@ export default function Home() {
                 </select>
               </div>
             )}
-
-            <div className="account-menu" ref={menuRef}>
-              <button className="user-chip" onClick={() => setMenuOpen((v) => !v)}>
-                {user.picture ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={user.picture} alt="" className="avatar-img" />
-                ) : (
-                  <span className="avatar">{initials}</span>
-                )}
-                <span>{user.name || user.email}</span>
-              </button>
-              {menuOpen && (
-                <div className="menu-dropdown">
-                  <Link href="/settings" className="menu-item" onClick={() => setMenuOpen(false)}>
-                    Profile &amp; API keys
-                  </Link>
-                  <button className="menu-item" onClick={handleSignOut}>
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </header>
 

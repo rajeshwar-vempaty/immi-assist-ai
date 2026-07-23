@@ -83,9 +83,17 @@ a {
   border-right: 1px solid var(--line);
   background: rgba(244, 241, 235, 0.88);
   backdrop-filter: blur(10px);
-  padding: 20px 16px;
-  gap: 16px;
+  padding: 14px 12px 12px;
+  gap: 12px;
   animation: slideIn 420ms ease both;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px;
 }
 
 .brand-mark {
@@ -124,9 +132,36 @@ a {
   font-size: 0.78rem;
 }
 
-.history-actions {
+.sidebar-new-chat {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar-new-chat:hover {
+  background: rgba(31, 111, 106, 0.08);
+  border-color: rgba(31, 111, 106, 0.24);
+}
+
+.sidebar-new-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--sea);
 }
 
 .btn {
@@ -174,17 +209,42 @@ a {
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 14px;
   overflow: auto;
   flex: 1;
+  padding: 2px;
+  margin: 0 -2px;
+}
+
+.history-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0 6px;
+  margin: 0;
+}
+
+.history-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-group-label {
+  margin: 0 0 4px;
+  padding: 0 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .history-item {
   text-align: left;
   border: 1px solid transparent;
   background: transparent;
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 8px;
+  padding: 8px 10px;
   cursor: pointer;
   color: var(--text);
   flex: 1;
@@ -199,14 +259,21 @@ a {
 
 .history-delete {
   flex: 0 0 auto;
-  width: 34px;
+  width: 28px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 1rem;
   line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.history-row:hover .history-delete,
+.history-row:focus-within .history-delete {
+  opacity: 1;
 }
 
 .history-delete:hover,
@@ -216,24 +283,85 @@ a {
   outline: none;
 }
 
-.history-item:hover,
+.history-item:hover {
+  background: rgba(11, 28, 40, 0.05);
+}
+
 .history-item.active {
-  background: rgba(31, 111, 106, 0.08);
-  border-color: rgba(31, 111, 106, 0.18);
+  background: rgba(31, 111, 106, 0.1);
 }
 
 .history-item .title {
-  font-size: 0.9rem;
-  font-weight: 600;
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.history-item .meta {
-  margin-top: 2px;
-  font-size: 0.72rem;
+.history-item.active .title {
+  font-weight: 600;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.sidebar-footer .account-menu {
+  width: 100%;
+}
+
+.user-chip.sidebar-user {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.user-chip.sidebar-user .avatar,
+.user-chip.sidebar-user .avatar-img {
+  flex-shrink: 0;
+}
+
+.user-chip.sidebar-user:hover {
+  background: rgba(11, 28, 40, 0.05);
+}
+
+.sidebar-user-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.sidebar-user-meta strong {
+  font-size: 0.86rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-user-meta small {
   color: var(--muted);
+  font-size: 0.74rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-dropdown.up {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: auto;
+  width: 100%;
+  min-width: 0;
 }
 
 .main-panel {
