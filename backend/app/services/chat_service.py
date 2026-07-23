@@ -217,11 +217,7 @@ class ChatService:
             )
         elif intent == Intent.TIMELINE:
             system_prompt = TIMELINE_PROMPT.format(
-<<<<<<< HEAD
-                form_type=_resolve_timeline_form_type(classified.sub_topic, request.message),
-=======
-                form_type=request.message,
->>>>>>> e070972 (feat(auth): Google login, user-scoped history, encrypted BYOK keys)
+                form_type=_resolve_timeline_form_type(None, request.message),
                 service_center="Unknown",
                 filing_date="Not provided",
                 category="General",
