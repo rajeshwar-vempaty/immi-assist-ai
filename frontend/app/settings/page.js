@@ -140,7 +140,7 @@ export default function SettingsPage() {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={user.picture} alt="" className="avatar-img" />
           ) : (
-            <span className="avatar">{(user.name || "U")[0]}</span>
+            <span className="avatar">{(user.name || user.email || "U").trim().slice(0, 2).toUpperCase()}</span>
           )}
           <span>{user.name || user.email}</span>
         </div>
@@ -152,19 +152,21 @@ export default function SettingsPage() {
       <main className="content">
         <h2 className="section-title">Profile & settings</h2>
         <p className="section-sub">
-          Manage your Google profile defaults and encrypted provider API keys.
+          Manage your account defaults and encrypted provider API keys.
         </p>
 
         {error && <div className="error-banner">{error}</div>}
 
         <section className="settings-card">
-          <h3>Google profile</h3>
+          <h3>Your profile</h3>
           <div className="profile-row">
             {user.picture ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.picture} alt="" className="avatar-img lg" />
             ) : (
-              <span className="avatar lg">{(user.name || "U")[0]}</span>
+              <span className="avatar lg">
+                {(user.name || user.email || "U").trim().slice(0, 2).toUpperCase()}
+              </span>
             )}
             <div>
               <strong>{user.name || "User"}</strong>

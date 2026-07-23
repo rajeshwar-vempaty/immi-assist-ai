@@ -67,11 +67,13 @@ export default function Home() {
   const [activeChatId, setActiveChatId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [toolLoading, setToolLoading] = useState(false);
   const [error, setError] = useState(null);
   const [prefs, setPrefs] = useState(null);
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
+  const [draftReady, setDraftReady] = useState(false);
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
   const draftKey = "immi_draft_message";
@@ -100,6 +102,7 @@ export default function Home() {
     if (!user) return;
     const draft = sessionStorage.getItem(draftKey);
     if (draft) setInput(draft);
+    setDraftReady(true);
     (async () => {
       setHistoryLoading(true);
       try {
@@ -137,11 +140,12 @@ export default function Home() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, tab]);
+  }, [messages, tab, chatLoading]);
 
   useEffect(() => {
+    if (!draftReady) return;
     sessionStorage.setItem(draftKey, input);
-  }, [input]);
+  }, [input, draftReady]);
 
   if (loading || !user) {
     return (
@@ -157,6 +161,9 @@ export default function Home() {
     setActiveChatId(null);
     setMessages([]);
     setError(null);
+    setChecklistResult(null);
+    setTimelineResult(null);
+    setRfeResult(null);
     setTab("chat");
     setHistoryOpen(false);
   };
@@ -191,7 +198,7 @@ export default function Home() {
 
   const handleSend = async (messageText = null) => {
     const text = messageText || input.trim();
-    if (!text || isLoading) return;
+    if (!text || chatLoading) return;
     if (!provider || !model) {
       setError("Select a provider/model in the selector, or add API keys in Settings.");
       return;
@@ -202,7 +209,7 @@ export default function Home() {
     setMessages(next);
     setInput("");
     sessionStorage.removeItem(draftKey);
-    setIsLoading(true);
+    setChatLoading(true);
 
     try {
       const response = await sendChatMessage({
@@ -234,12 +241,12 @@ export default function Home() {
       }
       setError(err.message);
     } finally {
-      setIsLoading(false);
+      setChatLoading(false);
     }
   };
 
   const handleChecklist = async () => {
-    setIsLoading(true);
+    setToolLoading(true);
     setError(null);
     try {
       setChecklistResult(
@@ -248,12 +255,12 @@ export default function Home() {
     } catch (err) {
       setError(err.message);
     } finally {
-      setIsLoading(false);
+      setToolLoading(false);
     }
   };
 
   const handleTimeline = async () => {
-    setIsLoading(true);
+    setToolLoading(true);
     setError(null);
     try {
       setTimelineResult(
@@ -266,29 +273,31 @@ export default function Home() {
     } catch (err) {
       setError(err.message);
     } finally {
-      setIsLoading(false);
+      setToolLoading(false);
     }
   };
 
   const handleRFE = async () => {
     if (rfeText.length < 10) return;
-    setIsLoading(true);
+    setToolLoading(true);
     setError(null);
     try {
       setRfeResult(await analyzeRFE({ rfe_text: rfeText }));
     } catch (err) {
       setError(err.message);
     } finally {
-      setIsLoading(false);
+      setToolLoading(false);
     }
   };
 
-  const initials = (user.name || user.email || "U")
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const initials = (() => {
+    const raw = (user.name || user.email || "U").trim();
+    const parts = raw.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return raw.slice(0, 2).toUpperCase();
+  })();
 
   return (
     <div className="app-shell">
@@ -322,18 +331,19 @@ export default function Home() {
             </p>
           )}
           {history.map((item) => (
-            <div key={item.id} style={{ display: "flex", gap: 4 }}>
+            <div key={item.id} className="history-row">
               <button
                 className={`history-item ${item.id === activeChatId ? "active" : ""}`}
-                style={{ flex: 1 }}
                 onClick={() => openChat(item.id)}
               >
                 <div className="title">{item.title}</div>
                 <div className="meta">{formatTime(item.updated_at)}</div>
               </button>
               <button
-                className="btn btn-ghost"
-                title="Delete"
+                type="button"
+                className="history-delete"
+                title="Delete conversation"
+                aria-label={`Delete ${item.title}`}
                 onClick={async () => {
                   if (!confirm("Delete this conversation?")) return;
                   try {
@@ -433,10 +443,17 @@ export default function Home() {
           </div>
         </header>
 
-        <main className="content">
-          {error && <div className="error-banner">{error}</div>}
-          {configuredCatalog.length === 0 && (
+        <main className={`content ${tab === "chat" ? "has-composer" : ""}`}>
+          {error && (
             <div className="error-banner">
+              <span>{error}</span>
+              <button type="button" className="banner-dismiss" onClick={() => setError(null)} aria-label="Dismiss">
+                ×
+              </button>
+            </div>
+          )}
+          {configuredCatalog.length === 0 && (
+            <div className="info-banner">
               No provider API keys yet.{" "}
               <Link href="/settings">Add keys in Settings</Link> to start chatting.
             </div>
@@ -479,7 +496,7 @@ export default function Home() {
                       )}
                     </div>
                   ))}
-                  {isLoading && <ChatThinking />}
+                  {chatLoading && <ChatThinking />}
                   <div ref={messagesEndRef} />
                 </div>
               )}
@@ -502,8 +519,8 @@ export default function Home() {
                 placeholder="Describe your situation…"
               />
               <div>
-                <button className="btn btn-primary" onClick={handleChecklist} disabled={isLoading}>
-                  Generate checklist
+                <button className="btn btn-primary" onClick={handleChecklist} disabled={toolLoading}>
+                  {toolLoading && tab === "checklist" ? "Generating…" : "Generate checklist"}
                 </button>
               </div>
               {checklistResult && (
@@ -511,7 +528,7 @@ export default function Home() {
                   <h3>
                     {checklistResult.visa_type} — {checklistResult.form_number}
                   </h3>
-                  {checklistResult.checklist.map((cat, i) => (
+                  {checklistResult?.checklist?.map((cat, i) => (
                     <div key={i} className="category">
                       <h4>{cat.category}</h4>
                       <ul>
@@ -538,8 +555,8 @@ export default function Home() {
                 ))}
               </select>
               <input className="field" type="date" value={filingDate} onChange={(e) => setFilingDate(e.target.value)} />
-              <button className="btn btn-primary" onClick={handleTimeline} disabled={isLoading}>
-                Estimate timeline
+              <button className="btn btn-primary" onClick={handleTimeline} disabled={toolLoading}>
+                {toolLoading && tab === "timeline" ? "Estimating…" : "Estimate timeline"}
               </button>
               {timelineResult && (
                 <div className="result-block">
@@ -560,9 +577,16 @@ export default function Home() {
                 onChange={(e) => setRfeText(e.target.value)}
                 placeholder="Paste your RFE notice text here…"
               />
-              <button className="btn btn-primary" onClick={handleRFE} disabled={isLoading || rfeText.length < 10}>
-                Analyze RFE
+              <button
+                className="btn btn-primary"
+                onClick={handleRFE}
+                disabled={toolLoading || rfeText.trim().length < 10}
+              >
+                {toolLoading && tab === "rfe" ? "Analyzing…" : "Analyze RFE"}
               </button>
+              {rfeText.trim().length > 0 && rfeText.trim().length < 10 ? (
+                <p className="field-hint">Paste at least a short RFE excerpt (10+ characters).</p>
+              ) : null}
               {rfeResult && (
                 <div className="result-block">
                   <ReactMarkdown>{rfeResult.summary}</ReactMarkdown>
@@ -590,7 +614,7 @@ export default function Home() {
               <button
                 className="btn btn-primary"
                 onClick={() => handleSend()}
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || chatLoading}
               >
                 Send
               </button>
