@@ -58,13 +58,18 @@ class ChatRequest(BaseModel):
     language: str = Field(default="en", description="Response language code")
 
 
+class SourceRef(BaseModel):
+    label: str
+    url: str = ""
+
+
 class ChatResponse(BaseModel):
     response: str
     intent: str
     confidence: float
     model_used: str
     provider: Optional[str] = None
-    sources: list[str]
+    sources: list[SourceRef] = Field(default_factory=list)
     requires_lawyer: bool = False
     conversation_id: Optional[str] = None
     session_id: Optional[str] = None
