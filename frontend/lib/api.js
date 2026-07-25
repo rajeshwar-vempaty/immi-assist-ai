@@ -187,6 +187,11 @@ export async function getUscisProcessingTime(form, category, office) {
   );
 }
 
+export async function getHealthReady() {
+  const response = await fetch(`${API_BASE}/health/ready`, { credentials: "include" });
+  return response.json();
+}
+
 export async function analyzeRFE(payload) {
   return apiRequest("/rfe/analyze", { method: "POST", body: JSON.stringify(payload) });
 }

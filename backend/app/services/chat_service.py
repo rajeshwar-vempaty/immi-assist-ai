@@ -19,6 +19,7 @@ from app.schemas.schemas import ChatRequest, ChatResponse
 from app.services import conversation_service as convs
 from app.services import credentials_service as creds
 from app.services.llm_json_service import extract_json
+from app.services.processing_time_resolver import format_official_block, lookup_official_time
 from app.services.rag_service import get_rag_service
 from app.utils.citations import format_citations
 from app.utils.disclaimer import CASE_SPECIFIC_REDIRECT, check_confidence, inject_disclaimer
@@ -78,6 +79,8 @@ def _format_timeline_text(data: dict) -> str:
         lines.extend([f"- {t}" for t in tips])
     if data.get("data_as_of"):
         lines.extend(["", f"_Data as of: {data['data_as_of']}_"])
+    if data.get("data_source"):
+        lines.append(f"_Source: {data['data_source']}_")
     return "\n".join(lines)
 
 
@@ -241,6 +244,7 @@ class ChatService:
             [f"{msg['role']}: {msg['content']}" for msg in history_msgs]
         )
 
+        official = None
         if intent == Intent.CHECKLIST:
             system_prompt = CHECKLIST_PROMPT.format(
                 visa_type=visa_type or "Unknown",
@@ -254,12 +258,21 @@ class ChatService:
                 context=context,
             )
         elif intent == Intent.TIMELINE:
+            form_type = _resolve_timeline_form_type(visa_type, request.message)
+            official = await lookup_official_time(
+                message=request.message,
+                form_type=form_type,
+                category=visa_type,
+            )
+            processing_data = context
+            if official:
+                processing_data = f"{format_official_block(official)}\n\n---\nSupporting notes:\n{context}"
             system_prompt = TIMELINE_PROMPT.format(
-                form_type=_resolve_timeline_form_type(None, request.message),
+                form_type=form_type,
                 service_center="Unknown",
                 filing_date="Not provided",
                 category=visa_type or "General",
-                processing_data=context,
+                processing_data=processing_data,
                 context=context,
             )
         else:
@@ -279,6 +292,20 @@ class ChatService:
         )
 
         response_text = _humanize_structured_response(intent, result.content)
+        if intent == Intent.TIMELINE and official and official.get("months") is not None:
+            months = official["months"]
+            source = official.get("source", "snapshot")
+            as_of = official.get("as_of") or official.get("publication_date")
+            url = official.get("uscis_url") or "https://egov.uscis.gov/processing-times/"
+            banner = (
+                f"**USCIS published figure:** 80% of cases in this category are completed within "
+                f"**{months} months** "
+                f"({source}{f', as of {as_of}' if as_of else ''}). "
+                f"[Verify on USCIS]({url})\n\n"
+            )
+            if f"{months} months" not in response_text[:280]:
+                response_text = banner + response_text
+
         confidence_warning = check_confidence(confidence)
         if confidence_warning:
             response_text = confidence_warning + "\n\n" + response_text
