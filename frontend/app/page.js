@@ -15,6 +15,8 @@ import {
   getUscisForms,
   getUscisOffices,
   getUscisProcessingTime,
+  estimateTimeline,
+  getHealthReady,
   listConversations,
   sendChatMessage,
   truncateConversation,
@@ -35,8 +37,25 @@ const QUICK_QUESTIONS = [
 ];
 
 const VISA_TYPES = [
-  "H1B", "H4", "L1A", "L1B", "O1", "EB1", "EB2", "EB3", "EB2_NIW",
-  "F1", "F1_OPT", "I485", "I130", "I140", "TN", "OTHER",
+  { id: "H1B", label: "H-1B" },
+  { id: "H4", label: "H-4" },
+  { id: "H4_EAD", label: "H-4 EAD" },
+  { id: "L1A", label: "L-1A" },
+  { id: "L1B", label: "L-1B" },
+  { id: "O1", label: "O-1" },
+  { id: "EB1", label: "EB-1" },
+  { id: "EB2", label: "EB-2" },
+  { id: "EB3", label: "EB-3" },
+  { id: "EB2_NIW", label: "EB-2 NIW" },
+  { id: "F1", label: "F-1" },
+  { id: "F1_OPT", label: "F-1 OPT" },
+  { id: "F1_STEM_OPT", label: "F-1 STEM OPT" },
+  { id: "I-485", label: "I-485" },
+  { id: "I-130", label: "I-130" },
+  { id: "I-140", label: "I-140" },
+  { id: "K1", label: "K-1" },
+  { id: "TN", label: "TN" },
+  { id: "OTHER", label: "Other" },
 ];
 
 function UscisTimeline() {
@@ -47,7 +66,9 @@ function UscisTimeline() {
   const [category, setCategory] = useState("");
   const [office, setOffice] = useState("");
   const [result, setResult] = useState(null);
+  const [explain, setExplain] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [explaining, setExplaining] = useState(false);
   const [stepLoading, setStepLoading] = useState("");
   const [error, setError] = useState("");
 
@@ -64,6 +85,7 @@ function UscisTimeline() {
     setCategories([]);
     setOffices([]);
     setResult(null);
+    setExplain(null);
     setError("");
     if (!id) return;
     setStepLoading("categories");
@@ -82,6 +104,7 @@ function UscisTimeline() {
     setOffice("");
     setOffices([]);
     setResult(null);
+    setExplain(null);
     setError("");
     if (!id) return;
     setStepLoading("offices");
@@ -102,12 +125,32 @@ function UscisTimeline() {
     setLoading(true);
     setError("");
     setResult(null);
+    setExplain(null);
     try {
       setResult(await getUscisProcessingTime(form, category, office));
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onExplain = async () => {
+    if (!form || explaining) return;
+    setExplaining(true);
+    setError("");
+    try {
+      const catLabel = categories.find((c) => c.id === category)?.description || category;
+      const data = await estimateTimeline({
+        form_type: form,
+        category: category || catLabel,
+        filing_date: null,
+      });
+      setExplain(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setExplaining(false);
     }
   };
 
@@ -238,6 +281,37 @@ function UscisTimeline() {
               </>
             )}
           </p>
+          {result.months != null ? (
+            <div className="pt-explain-actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={onExplain}
+                disabled={explaining}
+              >
+                {explaining ? "Explaining…" : "Explain this timeline"}
+              </button>
+            </div>
+          ) : null}
+          {explain ? (
+            <div className="pt-explain">
+              <p>{explain.status_explanation}</p>
+              {explain.official_months != null ? (
+                <p className="pt-explain-meta">
+                  Grounded in USCIS {explain.data_source} figure: {explain.official_months} months
+                  {explain.data_as_of ? ` (as of ${explain.data_as_of})` : ""}.
+                </p>
+              ) : null}
+              {explain.options_if_delayed?.length ? (
+                <ul>
+                  {explain.options_if_delayed.map((o, i) => (
+                    <li key={i}>{o}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {explain.disclaimer ? <p className="pt-explain-meta">{explain.disclaimer}</p> : null}
+            </div>
+          ) : null}
         </div>
       )}
     </section>
@@ -350,6 +424,7 @@ export default function Home() {
   const [checklistResult, setChecklistResult] = useState(null);
   const [rfeText, setRfeText] = useState("");
   const [rfeResult, setRfeResult] = useState(null);
+  const [kbInfo, setKbInfo] = useState(null);
 
   const configuredCatalog = useMemo(
     () => (prefs?.catalog || []).filter((c) => c.configured),
@@ -377,6 +452,14 @@ export default function Home() {
     const draft = sessionStorage.getItem(draftKey);
     if (draft) setInput(draft);
     setDraftReady(true);
+    getHealthReady()
+      .then((h) =>
+        setKbInfo({
+          mode: h.knowledge_base_mode || "sample",
+          docs: h.knowledge_base_documents ?? 0,
+        })
+      )
+      .catch(() => setKbInfo(null));
     (async () => {
       setHistoryLoading(true);
       try {
@@ -436,7 +519,6 @@ export default function Home() {
     setMessages([]);
     setError(null);
     setChecklistResult(null);
-    setTimelineResult(null);
     setRfeResult(null);
     setTab("chat");
     setHistoryOpen(false);
@@ -686,6 +768,14 @@ export default function Home() {
         </div>
 
         <div className="sidebar-footer">
+          {kbInfo ? (
+            <p
+              className={`kb-badge ${kbInfo.mode === "sample" ? "sample" : "ready"}`}
+              title="Answers cite the knowledge base. Sample mode means curated starter docs; scrape expands coverage."
+            >
+              Knowledge: {kbInfo.mode === "sample" ? "sample" : kbInfo.mode} · {kbInfo.docs} docs
+            </p>
+          ) : null}
           <div className="account-menu" ref={menuRef}>
             <button className="user-chip sidebar-user" onClick={() => setMenuOpen((v) => !v)}>
               {user.picture ? (
@@ -899,7 +989,7 @@ export default function Home() {
               <h2 className="section-title">Document checklist</h2>
               <select className="select" value={visaType} onChange={(e) => setVisaType(e.target.value)}>
                 {VISA_TYPES.map((v) => (
-                  <option key={v} value={v}>{v}</option>
+                  <option key={v.id} value={v.id}>{v.label}</option>
                 ))}
               </select>
               <textarea

@@ -1,6 +1,7 @@
 """Health check endpoints."""
 
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -12,6 +13,25 @@ from app.db.base import get_db
 from app.services.rag_service import get_rag_service
 
 router = APIRouter()
+
+# Sample ingest seeds ~12 policy docs. Treat anything at/under this as sample mode
+# unless a scraped raw corpus is present.
+_SAMPLE_POLICY_CEILING = 20
+
+
+def _knowledge_base_mode(policy_count: int) -> str:
+    settings = get_settings()
+    raw_candidates = [
+        Path(settings.resolved_chroma_dir).resolve().parent / "raw" / "uscis_all_documents.json",
+        Path(__file__).resolve().parents[2] / "data" / "raw" / "uscis_all_documents.json",
+        Path("/workspace/backend/data/raw/uscis_all_documents.json"),
+    ]
+    scraped = any(p.exists() and p.stat().st_size > 1000 for p in raw_candidates)
+    if scraped and policy_count > _SAMPLE_POLICY_CEILING:
+        return "scraped"
+    if policy_count <= _SAMPLE_POLICY_CEILING:
+        return "sample"
+    return "expanded"
 
 
 @router.get("/health/live")
@@ -33,6 +53,7 @@ async def readiness(db: Session = Depends(get_db)):
     policy_count = rag.policy_collection.count()
     timeline_count = rag.timeline_collection.count()
     min_docs = settings.min_knowledge_base_documents
+    kb_mode = _knowledge_base_mode(policy_count)
 
     kb_ok = policy_count >= min_docs and timeline_count > 0
     ready = db_ok and kb_ok
@@ -42,6 +63,8 @@ async def readiness(db: Session = Depends(get_db)):
         "knowledge_base_documents": policy_count,
         "processing_times_documents": timeline_count,
         "min_required_documents": min_docs,
+        "knowledge_base_mode": kb_mode,
+        "chroma_persist_dir": settings.resolved_chroma_dir,
         "timestamp": datetime.utcnow().isoformat(),
     }
     if not ready:
@@ -53,8 +76,10 @@ async def readiness(db: Session = Depends(get_db)):
 async def health_check():
     """Legacy health endpoint."""
     rag = get_rag_service()
+    policy_count = rag.policy_collection.count()
     return {
         "status": "healthy",
-        "knowledge_base_documents": rag.policy_collection.count(),
+        "knowledge_base_documents": policy_count,
+        "knowledge_base_mode": _knowledge_base_mode(policy_count),
         "timestamp": datetime.utcnow().isoformat(),
     }

@@ -125,6 +125,14 @@ class TimelineResponse(BaseModel):
     status_explanation: str
     options_if_delayed: list[str]
     disclaimer: str
+    data_source: Optional[str] = Field(
+        None, description="live | snapshot | llm — where the wait-time figure came from"
+    )
+    data_as_of: Optional[str] = None
+    official_months: Optional[float] = Field(
+        None, description="USCIS '80% of cases completed within' months when available"
+    )
+    uscis_url: Optional[str] = None
 
 
 # ----- RFE Analysis -----
