@@ -372,6 +372,30 @@ def run_scrape(extra_args: list[str] | None = None) -> None:
         logger.warning("Scrape pipeline failed; falling back to cached/sample data.")
 
 
+def _has_scraped_corpus_on_disk() -> bool:
+    raw = _raw_dir()
+    all_docs = raw / "uscis_all_documents.json"
+    manifest = raw / "corpus_manifest.json"
+    if manifest.exists():
+        try:
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+            if payload.get("corpus_origin") == "scraped" and int(payload.get("document_count") or 0) > 0:
+                return True
+        except Exception:
+            pass
+    if all_docs.exists() and all_docs.stat().st_size > 1000:
+        # Heuristic: scraped corpora are much larger than sample; also check origin markers.
+        try:
+            docs = json.loads(all_docs.read_text(encoding="utf-8"))
+            if isinstance(docs, list) and any(d.get("corpus_origin") == "scraped" for d in docs[:50]):
+                return True
+            if isinstance(docs, list) and len(docs) > 20:
+                return True
+        except Exception:
+            return all_docs.stat().st_size > 1000
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(description="Ingest USCIS data into ChromaDB")
     parser.add_argument(
@@ -394,14 +418,27 @@ def main():
     args = parser.parse_args()
 
     if args.scrape:
-        run_scrape(["--deep", "--visa-bulletin", "--max-chapters", "40"])
+        run_scrape(["--max-chapters", "40"])
+
+    if args.require_scraped and not _has_scraped_corpus_on_disk():
+        logger.error(
+            "Scraped corpus required but not found under backend/data/raw/. "
+            "Run: python scripts/scrape_uscis_data.py"
+        )
+        raise SystemExit(2)
 
     if not args.yes:
         from app.services.rag_service import get_rag_service
 
         rag = get_rag_service()
         if rag.policy_collection.count() > 0:
-            logger.info("Knowledge base already populated. Use --yes to force re-ingest.")
+            if args.require_scraped:
+                logger.info(
+                    "Scraped corpus present and knowledge base already populated "
+                    "(use --yes to force re-ingest)."
+                )
+            else:
+                logger.info("Knowledge base already populated. Use --yes to force re-ingest.")
             return
 
     ingest_data(

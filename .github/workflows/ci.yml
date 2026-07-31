@@ -24,7 +24,7 @@ jobs:
           OPENAI_API_KEY: test
           ANTHROPIC_API_KEY: test
           GOOGLE_API_KEY: test
-          DATABASE_URL: sqlite:///:memory:
+          DATABASE_URL: "sqlite:///:memory:"
         run: pytest tests/ -v
 
   scrape-smoke:
@@ -44,7 +44,7 @@ jobs:
           OPENAI_API_KEY: test
           ANTHROPIC_API_KEY: test
           GOOGLE_API_KEY: test
-          DATABASE_URL: sqlite:///:memory:
+          DATABASE_URL: "sqlite:///:memory:"
         run: pytest tests/test_scrapers_phase2.py tests/test_rag_format_context.py -v
 
   frontend:

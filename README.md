@@ -2,7 +2,7 @@
 
 Beacon helps people navigating US visas, documents, wait times, and RFEs ask clearer questions — with citations you can check. **This is an early, iterating product:** informational guidance only, not legal advice.
 
-**Knowledge today:** the app ships with a **sample** USCIS-oriented knowledge base. Expand it with a deep Policy Manual scrape + Visa Bulletin ingest for production. Processing times try the live USCIS API and fall back to a dated snapshot when that API is blocked. Set `REQUIRE_SCRAPED_KB=true` (or `APP_ENV=production`) so `/health/ready` rejects sample-only corpora.
+**Knowledge today:** the app ships with a **sample** USCIS-oriented knowledge base. Expand it with a deep Policy Manual scrape + Visa Bulletin ingest for production. Processing times try the live USCIS API and fall back to a dated snapshot when that API is blocked. Set `REQUIRE_SCRAPED_KB=true` after a scraped ingest so `/health/ready` rejects sample-only corpora (keep it off during first boot so the scheduler can refresh).
 
 ## Architecture (current)
 

@@ -31,8 +31,14 @@ CHAPTER_HTML = """
 BULLETIN_INDEX_HTML = """
 <html><body>
   <h1>Visa Bulletin</h1>
+  <a href="/content/travel/en/legal/visa-law0/visa-bulletin/2025/visa-bulletin-for-june-2025.html">
+    Visa Bulletin for June 2025
+  </a>
   <a href="/content/travel/en/legal/visa-law0/visa-bulletin/2026/visa-bulletin-for-july-2026.html">
     Visa Bulletin for July 2026
+  </a>
+  <a href="/content/travel/en/legal/visa-law0/visa-bulletin/2026/visa-bulletin-for-may-2026.html">
+    Visa Bulletin for May 2026
   </a>
 </body></html>
 """
@@ -92,7 +98,10 @@ def test_visa_bulletin_latest_url_from_index():
     vb = VisaBulletinScraper()
     url = vb.latest_bulletin_url(BULLETIN_INDEX_HTML)
     assert url is not None
+    # Must pick chronologically latest (July 2026), not first link (June 2025).
     assert "visa-bulletin-for-july-2026" in url
+    assert "june-2025" not in url
+    assert "may-2026" not in url
 
 
 def test_visa_bulletin_scrape_builds_rag_chunks(monkeypatch):
