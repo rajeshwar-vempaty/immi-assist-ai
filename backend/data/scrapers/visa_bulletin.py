@@ -72,7 +72,21 @@ class VisaBulletinScraper:
             resp.raise_for_status()
             html = resp.text
         soup = BeautifulSoup(html, "lxml")
-        # Prefer links that look like the current month bulletin.
+        # Prefer the chronologically latest "Visa Bulletin for <Month> <Year>" link.
+        month_map = {
+            "january": 1,
+            "february": 2,
+            "march": 3,
+            "april": 4,
+            "may": 5,
+            "june": 6,
+            "july": 7,
+            "august": 8,
+            "september": 9,
+            "october": 10,
+            "november": 11,
+            "december": 12,
+        }
         candidates = []
         for a in soup.select("a[href*='visa-bulletin']"):
             href = a.get("href", "")
@@ -81,13 +95,27 @@ class VisaBulletinScraper:
                 continue
             if href.startswith("/"):
                 href = "https://travel.state.gov" + href
-            if re.search(r"visa-bulletin-for-", href, re.I) or re.search(
-                r"Visa Bulletin for", text, re.I
+            blob = f"{href} {text}"
+            if not (
+                re.search(r"visa-bulletin-for-", href, re.I)
+                or re.search(r"Visa Bulletin for", text, re.I)
             ):
-                candidates.append((href, text))
+                continue
+            sort_key = (0, 0)  # year, month — unknown dates sort earliest
+            m = re.search(
+                r"(?:visa-bulletin-for-|Visa Bulletin for\s+)([A-Za-z]+)[- ](\d{4})",
+                blob,
+                re.I,
+            )
+            if m:
+                month = month_map.get(m.group(1).lower(), 0)
+                year = int(m.group(2))
+                sort_key = (year, month)
+            candidates.append((sort_key, href, text))
         if not candidates:
             return BULLETIN_INDEX_URL
-        return candidates[0][0]
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return candidates[0][1]
 
     def scrape(self, url: str | None = None) -> dict:
         index_html = None

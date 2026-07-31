@@ -71,8 +71,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Scrape USCIS / Visa Bulletin into backend/data/raw")
     parser.add_argument(
         "--deep",
-        action="store_true",
-        help="Discover chapter URLs from each volume index (recommended)",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Discover chapter URLs under each volume (default: on; use --no-deep for volume pages only)",
     )
     parser.add_argument(
         "--all-volumes",
@@ -93,13 +94,15 @@ def main() -> int:
     )
     parser.add_argument(
         "--forms",
-        action="store_true",
-        help="Also scrape common form instruction pages",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Include common form instruction pages (default: on; use --no-forms to skip)",
     )
     parser.add_argument(
         "--visa-bulletin",
-        action="store_true",
-        help="Also scrape latest Visa Bulletin into structured JSON + RAG paragraphs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Include latest Visa Bulletin RAG paragraphs (default: on; use --no-visa-bulletin to skip)",
     )
     parser.add_argument(
         "--delay",
@@ -125,14 +128,14 @@ def main() -> int:
     print("Beacon — USCIS Policy Manual scrape")
     print("=" * 60)
     print(
-        f"  deep={args.deep or args.all_volumes}  volumes={volume_numbers}  "
-        f"max_chapters={args.max_chapters}"
+        f"  deep={args.deep}  volumes={volume_numbers}  "
+        f"max_chapters={args.max_chapters}  forms={args.forms}  visa_bulletin={args.visa_bulletin}"
     )
 
     policy_docs = scraper.scrape_policy_manual(
         volume_numbers=volume_numbers,
         max_chapters=args.max_chapters,
-        deep=args.deep or args.all_volumes,
+        deep=args.deep,
     )
     print(f"Policy documents scraped: {len(policy_docs)}")
 

@@ -88,7 +88,8 @@ class Settings(BaseSettings):
 
     # Knowledge base
     min_knowledge_base_documents: int = 10
-    # When True (or when app_env=production), /health/ready fails if KB is sample-only.
+    # When True, /health/ready requires knowledge_base_mode == "scraped".
+    # Keep false by default so production bootstrap (sample ingest → scheduler scrape) can start.
     require_scraped_kb: bool = False
 
     # LLM resilience

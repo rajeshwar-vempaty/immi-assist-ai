@@ -35,7 +35,15 @@ def run_refresh() -> bool:
     logger.info("=" * 60)
 
     scrape = subprocess.run(
-        [sys.executable, str(SCRAPE_SCRIPT)],
+        [
+            sys.executable,
+            str(SCRAPE_SCRIPT),
+            "--deep",
+            "--forms",
+            "--visa-bulletin",
+            "--max-chapters",
+            os.getenv("SCRAPE_MAX_CHAPTERS", "80"),
+        ],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,
