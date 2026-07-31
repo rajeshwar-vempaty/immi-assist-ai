@@ -56,7 +56,11 @@ async def readiness(db: Session = Depends(get_db)):
     kb_mode = _knowledge_base_mode(policy_count)
 
     kb_ok = policy_count >= min_docs and timeline_count > 0
-    ready = db_ok and kb_ok
+    require_scraped = settings.require_scraped_kb or (
+        settings.app_env.lower() in ("production", "prod")
+    )
+    scraped_ok = (not require_scraped) or kb_mode != "sample"
+    ready = db_ok and kb_ok and scraped_ok
     payload = {
         "status": "ready" if ready else "not_ready",
         "database": "ok" if db_ok else "error",
@@ -64,6 +68,8 @@ async def readiness(db: Session = Depends(get_db)):
         "processing_times_documents": timeline_count,
         "min_required_documents": min_docs,
         "knowledge_base_mode": kb_mode,
+        "require_scraped_kb": require_scraped,
+        "scraped_kb_ok": scraped_ok,
         "chroma_persist_dir": settings.resolved_chroma_dir,
         "timestamp": datetime.utcnow().isoformat(),
     }

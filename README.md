@@ -2,7 +2,7 @@
 
 Beacon helps people navigating US visas, documents, wait times, and RFEs ask clearer questions — with citations you can check. **This is an early, iterating product:** informational guidance only, not legal advice.
 
-**Knowledge today:** the app ships with a **sample** USCIS-oriented knowledge base you can expand by scraping/ingesting official pages. Processing times try the live USCIS API and fall back to a dated snapshot when that API is blocked.
+**Knowledge today:** the app ships with a **sample** USCIS-oriented knowledge base. Expand it with a deep Policy Manual scrape + Visa Bulletin ingest for production. Processing times try the live USCIS API and fall back to a dated snapshot when that API is blocked. Set `REQUIRE_SCRAPED_KB=true` (or `APP_ENV=production`) so `/health/ready` rejects sample-only corpora.
 
 ## Architecture (current)
 
@@ -43,8 +43,9 @@ pip install -r requirements.txt
 # From repository root — seeds sample policy + processing-time collections
 python scripts/ingest_uscis_data.py --yes
 
-# Optional: scrape USCIS pages then re-ingest (expands beyond sample mode)
-# python scripts/scrape_uscis_data.py && python scripts/ingest_uscis_data.py --yes
+# Recommended for production / private pilot: deep scrape + Visa Bulletin, then require scraped KB
+# python scripts/scrape_uscis_data.py --deep --visa-bulletin --max-chapters 40
+# python scripts/ingest_uscis_data.py --yes --require-scraped
 ```
 
 Chroma persists under `backend/data/chroma_db` when `CHROMA_PERSIST_DIR=./data/chroma_db` (resolved relative to the backend package).

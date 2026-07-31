@@ -15,8 +15,8 @@ out/
 .env.local
 .env.production
 
-# Data
-data/
+# Data (runtime corpora — scrapers under backend/data/scrapers stay tracked)
+/data/
 backend/data/chroma_db/
 backend/data/raw/
 

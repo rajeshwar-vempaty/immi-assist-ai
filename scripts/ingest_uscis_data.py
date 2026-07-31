@@ -4,7 +4,10 @@ Data Ingestion Pipeline — Loads USCIS data into ChromaDB vector store.
 Usage (from repo root):
     python scripts/ingest_uscis_data.py
     python scripts/ingest_uscis_data.py --yes --collection all
+    python scripts/ingest_uscis_data.py --yes --require-scraped
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -172,14 +175,72 @@ def load_sample_data() -> list[dict]:
     return sample_documents
 
 
-def load_policy_documents() -> list[dict]:
-    raw_data_path = Path(__file__).parent.parent / "backend" / "data" / "raw" / "uscis_all_documents.json"
-    if raw_data_path.exists():
-        logger.info("Loading scraped USCIS data...")
+def _raw_dir() -> Path:
+    return Path(__file__).parent.parent / "backend" / "data" / "raw"
+
+
+def load_visa_bulletin_documents() -> list[dict]:
+    """Load Visa Bulletin RAG paragraphs if present (merged or standalone)."""
+    standalone = _raw_dir() / "visa_bulletin_rag.json"
+    if standalone.exists():
+        with open(standalone) as f:
+            docs = json.load(f)
+        if isinstance(docs, list) and docs:
+            logger.info("Loading %s Visa Bulletin RAG paragraphs...", len(docs))
+            return docs
+    latest = _raw_dir() / "visa_bulletin_latest.json"
+    if latest.exists():
+        with open(latest) as f:
+            payload = json.load(f)
+        docs = payload.get("rag_documents") or []
+        if docs:
+            logger.info("Loading %s Visa Bulletin RAG paragraphs from latest...", len(docs))
+            return docs
+    return []
+
+
+def load_policy_documents(*, allow_sample: bool = True) -> list[dict]:
+    """Load scraped corpus; optionally fall back to built-in sample KB."""
+    raw_data_path = _raw_dir() / "uscis_all_documents.json"
+    docs: list[dict] = []
+    if raw_data_path.exists() and raw_data_path.stat().st_size > 100:
+        logger.info("Loading scraped USCIS data from %s...", raw_data_path)
         with open(raw_data_path) as f:
-            return json.load(f)
+            docs = json.load(f)
+        if not isinstance(docs, list):
+            docs = []
+
+    # Merge standalone Visa Bulletin if not already in the merged corpus.
+    for vb in load_visa_bulletin_documents():
+        url = vb.get("url") or ""
+        content_prefix = (vb.get("content") or "")[:80]
+        already = any(
+            (d.get("url") or "") == url and (d.get("content") or "")[:80] == content_prefix
+            for d in docs
+        )
+        if not already:
+            docs.append(vb)
+
+    if docs:
+        scraped_count = sum(1 for d in docs if d.get("corpus_origin") == "scraped")
+        logger.info(
+            "Policy corpus ready: %s documents (%s marked corpus_origin=scraped)",
+            len(docs),
+            scraped_count,
+        )
+        return docs
+
+    if not allow_sample:
+        raise RuntimeError(
+            "No scraped USCIS corpus found under backend/data/raw/. "
+            "Run: python scripts/scrape_uscis_data.py --deep --visa-bulletin"
+        )
+
     logger.info("No scraped data found. Loading sample knowledge base...")
-    return load_sample_data()
+    sample = load_sample_data()
+    for d in sample:
+        d.setdefault("corpus_origin", "sample")
+    return sample
 
 
 def load_processing_times_documents() -> list[dict]:
@@ -239,16 +300,25 @@ def ingest_collection(rag, collection_name: str, documents: list[dict], force: b
     record_ingestion_run(collection_name, 0, "running")
 
     texts = [doc["content"] for doc in documents]
-    metadatas = [
-        {
+    metadatas = []
+    for doc in documents:
+        meta = {
             "source": doc.get("source", "USCIS"),
-            "section": doc.get("section", ""),
+            "section": doc.get("section", "") or doc.get("chapter", "") or "",
             "doc_type": doc.get("doc_type", "policy"),
-            "url": doc.get("url", ""),
+            "url": doc.get("url", "") or "",
+            "volume": doc.get("volume", "") or "",
+            "chapter": doc.get("chapter", "") or "",
+            "effective_date": doc.get("effective_date", "") or "",
+            "scraped_at": doc.get("scraped_at", "") or "",
+            "corpus_origin": doc.get("corpus_origin", "sample") or "sample",
         }
-        for doc in documents
-    ]
-    ids = [f"{collection_name}_{i:04d}" for i in range(len(documents))]
+        # Chroma metadata values must be str/int/float/bool — coerce None away.
+        metadatas.append({k: ("" if v is None else v) for k, v in meta.items()})
+    ids = []
+    for i, doc in enumerate(documents):
+        doc_id = doc.get("id")
+        ids.append(str(doc_id) if doc_id else f"{collection_name}_{i:04d}")
 
     logger.info(f"Ingesting {len(documents)} documents into {collection_name}...")
     rag.add_documents(
@@ -268,7 +338,7 @@ def ingest_collection(rag, collection_name: str, documents: list[dict], force: b
     return final
 
 
-def ingest_data(force: bool = False, collection: str = "all"):
+def ingest_data(force: bool = False, collection: str = "all", require_scraped: bool = False):
     from app.services.rag_service import get_rag_service
 
     logger.info("=" * 60)
@@ -278,7 +348,7 @@ def ingest_data(force: bool = False, collection: str = "all"):
     rag = get_rag_service()
 
     if collection in ("all", "uscis_policy"):
-        docs = load_policy_documents()
+        docs = load_policy_documents(allow_sample=not require_scraped)
         ingest_collection(rag, "uscis_policy", docs, force=force)
 
     if collection in ("all", "processing_times"):
@@ -288,16 +358,16 @@ def ingest_data(force: bool = False, collection: str = "all"):
     logger.info("Ingestion complete.")
 
 
-def run_scrape() -> None:
+def run_scrape(extra_args: list[str] | None = None) -> None:
     """Run USCIS scrape pipeline before ingest."""
     import subprocess
 
     scrape_script = Path(__file__).parent / "scrape_uscis_data.py"
-    logger.info("Running USCIS scrape pipeline...")
-    result = subprocess.run(
-        [sys.executable, str(scrape_script)],
-        cwd=str(Path(__file__).parent.parent),
-    )
+    cmd = [sys.executable, str(scrape_script)]
+    if extra_args:
+        cmd.extend(extra_args)
+    logger.info("Running USCIS scrape pipeline: %s", " ".join(cmd))
+    result = subprocess.run(cmd, cwd=str(Path(__file__).parent.parent))
     if result.returncode != 0:
         logger.warning("Scrape pipeline failed; falling back to cached/sample data.")
 
@@ -311,6 +381,11 @@ def main():
         "--scrape", action="store_true", help="Run USCIS scraper before ingest"
     )
     parser.add_argument(
+        "--require-scraped",
+        action="store_true",
+        help="Fail if no scraped corpus is present (reject sample-only KB)",
+    )
+    parser.add_argument(
         "--collection",
         choices=["all", "uscis_policy", "processing_times"],
         default="all",
@@ -319,7 +394,7 @@ def main():
     args = parser.parse_args()
 
     if args.scrape:
-        run_scrape()
+        run_scrape(["--deep", "--visa-bulletin", "--max-chapters", "40"])
 
     if not args.yes:
         from app.services.rag_service import get_rag_service
@@ -329,7 +404,11 @@ def main():
             logger.info("Knowledge base already populated. Use --yes to force re-ingest.")
             return
 
-    ingest_data(force=args.yes, collection=args.collection)
+    ingest_data(
+        force=args.yes,
+        collection=args.collection,
+        require_scraped=args.require_scraped,
+    )
 
 
 if __name__ == "__main__":

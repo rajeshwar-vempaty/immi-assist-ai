@@ -88,6 +88,8 @@ class Settings(BaseSettings):
 
     # Knowledge base
     min_knowledge_base_documents: int = 10
+    # When True (or when app_env=production), /health/ready fails if KB is sample-only.
+    require_scraped_kb: bool = False
 
     # LLM resilience
     llm_timeout_seconds: int = 60

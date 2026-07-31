@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "cursor/**"]
+    branches: [main, "cursor/**", "rvempaty/**"]
   pull_request:
     branches: [main]
 
@@ -26,6 +26,26 @@ jobs:
           GOOGLE_API_KEY: test
           DATABASE_URL: sqlite:///:memory:
         run: pytest tests/ -v
+
+  scrape-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Scraper unit smoke (mocked HTML, no live USCIS)
+        env:
+          OPENAI_API_KEY: test
+          ANTHROPIC_API_KEY: test
+          GOOGLE_API_KEY: test
+          DATABASE_URL: sqlite:///:memory:
+        run: pytest tests/test_scrapers_phase2.py tests/test_rag_format_context.py -v
 
   frontend:
     runs-on: ubuntu-latest
