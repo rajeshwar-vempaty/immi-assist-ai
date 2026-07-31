@@ -735,7 +735,14 @@ a {
   padding-top: 8px;
   border-top: 1px solid var(--line);
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-item-row {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
 }
 
@@ -755,6 +762,29 @@ a.source-chip.source-link {
 a.source-chip.source-link:hover {
   background: rgba(31, 111, 106, 0.2);
   text-decoration: underline;
+}
+
+.source-excerpt-toggle {
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted, #5c6560);
+  cursor: pointer;
+}
+
+.source-excerpt-toggle:hover {
+  color: var(--sea-deep);
+  border-color: rgba(31, 111, 106, 0.35);
+}
+
+.source-excerpt {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted, #5c6560);
+  max-width: 42rem;
 }
 
 .bubble.assistant a {

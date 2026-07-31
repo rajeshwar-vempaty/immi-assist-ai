@@ -325,26 +325,47 @@ const markdownComponents = {
 };
 
 function SourceChips({ sources }) {
+  const [expanded, setExpanded] = useState(null);
+  if (!sources?.length) return null;
+
   return (
     <div className="sources">
-      {sources.slice(0, 4).map((s, j) => {
+      {sources.map((s, j) => {
         const label = typeof s === "string" ? s : s?.label || "Source";
         const url = typeof s === "string" ? "" : s?.url || "";
-        return url ? (
-          <a
-            key={j}
-            className="source-chip source-link"
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={url}
-          >
-            {label}
-          </a>
-        ) : (
-          <span key={j} className="source-chip">
-            {label}
-          </span>
+        const excerpt = typeof s === "string" ? "" : s?.excerpt || "";
+        const isOpen = expanded === j;
+        return (
+          <div key={j} className="source-item">
+            <div className="source-item-row">
+              {url ? (
+                <a
+                  className="source-chip source-link"
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={url}
+                >
+                  {label}
+                </a>
+              ) : (
+                <span className="source-chip">{label}</span>
+              )}
+              {excerpt ? (
+                <button
+                  type="button"
+                  className="source-excerpt-toggle"
+                  aria-expanded={isOpen}
+                  onClick={() => setExpanded(isOpen ? null : j)}
+                >
+                  {isOpen ? "Hide excerpt" : "Show excerpt"}
+                </button>
+              ) : null}
+            </div>
+            {isOpen && excerpt ? (
+              <p className="source-excerpt">{excerpt}</p>
+            ) : null}
+          </div>
         );
       })}
     </div>

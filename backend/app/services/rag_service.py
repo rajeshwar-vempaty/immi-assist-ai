@@ -153,7 +153,7 @@ class RAGService:
         Format retrieved documents into context string + source list.
 
         Returns:
-            (context_string, list of {"label", "url"} source refs)
+            (context_string, list of {"label", "url", "excerpt"} source refs)
         """
         if not retrieved_docs:
             return "No relevant context found in the knowledge base.", []
@@ -163,18 +163,25 @@ class RAGService:
         seen_labels = set()
 
         for i, doc in enumerate(retrieved_docs, 1):
-            source_name = doc["metadata"].get("source", "USCIS Document")
-            section = doc["metadata"].get("section", "")
+            meta = doc.get("metadata") or {}
+            source_name = meta.get("source", "USCIS Document")
+            section = meta.get("section", "") or meta.get("chapter", "")
             source_label = f"{source_name} — {section}" if section else source_name
             inline = format_inline_citation(source_label, i)
+            body = doc.get("document") or ""
 
-            context_parts.append(
-                f"{inline}\n{doc['document']}\n"
-            )
+            context_parts.append(f"{inline}\n{body}\n")
             if source_label not in seen_labels:
                 seen_labels.add(source_label)
+                excerpt = " ".join(body.split())
+                if len(excerpt) > 280:
+                    excerpt = excerpt[:277].rstrip() + "…"
                 sources.append(
-                    {"label": source_label, "url": doc["metadata"].get("url", "") or ""}
+                    {
+                        "label": source_label,
+                        "url": meta.get("url", "") or "",
+                        "excerpt": excerpt,
+                    }
                 )
 
         context = "\n---\n".join(context_parts)

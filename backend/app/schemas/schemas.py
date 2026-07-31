@@ -61,6 +61,7 @@ class ChatRequest(BaseModel):
 class SourceRef(BaseModel):
     label: str
     url: str = ""
+    excerpt: str = ""
 
 
 class ChatResponse(BaseModel):
