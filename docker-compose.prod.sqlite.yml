@@ -82,7 +82,8 @@ services:
       - .env
     environment:
       - INGEST_INTERVAL_HOURS=${INGEST_INTERVAL_HOURS:-168}
-      - RUN_REFRESH_ON_START=false
+      - RUN_REFRESH_ON_START=${RUN_REFRESH_ON_START:-false}
+      - SCRAPE_MAX_CHAPTERS=${SCRAPE_MAX_CHAPTERS:-80}
       - DATABASE_URL=sqlite:////app/data/immi_assist.db
       - CHROMA_PERSIST_DIR=/app/data/chroma_db
     volumes:
