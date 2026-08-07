@@ -14,20 +14,54 @@ from app.services.rag_service import get_rag_service
 
 router = APIRouter()
 
-# Sample ingest seeds ~12 policy docs. Treat anything at/under this as sample mode
-# unless a scraped raw corpus is present.
+# Sample ingest seeds ~12 policy docs. Counts at/under this are treated as sample
+# unless a scraped raw corpus (or corpus_manifest) is present.
 _SAMPLE_POLICY_CEILING = 20
 
 
-def _knowledge_base_mode(policy_count: int) -> str:
+def _raw_corpus_paths() -> list[Path]:
     settings = get_settings()
-    raw_candidates = [
-        Path(settings.resolved_chroma_dir).resolve().parent / "raw" / "uscis_all_documents.json",
-        Path(__file__).resolve().parents[2] / "data" / "raw" / "uscis_all_documents.json",
+    chroma_parent = Path(settings.resolved_chroma_dir).resolve().parent
+    backend_data = Path(__file__).resolve().parents[2] / "data"
+    return [
+        chroma_parent / "raw" / "uscis_all_documents.json",
+        chroma_parent / "raw" / "corpus_manifest.json",
+        backend_data / "raw" / "uscis_all_documents.json",
+        backend_data / "raw" / "corpus_manifest.json",
         Path("/workspace/backend/data/raw/uscis_all_documents.json"),
+        Path("/workspace/backend/data/raw/corpus_manifest.json"),
     ]
-    scraped = any(p.exists() and p.stat().st_size > 1000 for p in raw_candidates)
-    if scraped and policy_count > _SAMPLE_POLICY_CEILING:
+
+
+def _has_scraped_raw_corpus() -> bool:
+    """True when a non-trivial scraped corpus (or manifest) exists on disk."""
+    for path in _raw_corpus_paths():
+        if not path.exists():
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        if path.name == "corpus_manifest.json" and size > 40:
+            try:
+                import json
+
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if payload.get("corpus_origin") == "scraped" and int(
+                    payload.get("document_count") or 0
+                ) > 0:
+                    return True
+            except Exception:
+                continue
+        if path.name == "uscis_all_documents.json" and size > 1000:
+            return True
+    return False
+
+
+def _knowledge_base_mode(policy_count: int) -> str:
+    scraped_on_disk = _has_scraped_raw_corpus()
+    if scraped_on_disk and policy_count > 0:
+        # Scraped corpus present — even capped chapter runs (<20 docs) count as scraped.
         return "scraped"
     if policy_count <= _SAMPLE_POLICY_CEILING:
         return "sample"
@@ -56,10 +90,10 @@ async def readiness(db: Session = Depends(get_db)):
     kb_mode = _knowledge_base_mode(policy_count)
 
     kb_ok = policy_count >= min_docs and timeline_count > 0
-    require_scraped = settings.require_scraped_kb or (
-        settings.app_env.lower() in ("production", "prod")
-    )
-    scraped_ok = (not require_scraped) or kb_mode != "sample"
+    # Only enforce when explicitly configured. Do NOT imply from APP_ENV=production —
+    # prod compose starts with sample ingest and the scheduler depends on /health/ready.
+    require_scraped = bool(settings.require_scraped_kb)
+    scraped_ok = (not require_scraped) or kb_mode == "scraped"
     ready = db_ok and kb_ok and scraped_ok
     payload = {
         "status": "ready" if ready else "not_ready",
