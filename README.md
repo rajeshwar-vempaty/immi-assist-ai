@@ -43,9 +43,10 @@ pip install -r requirements.txt
 # From repository root — seeds sample policy + processing-time collections
 python scripts/ingest_uscis_data.py --yes
 
-# Recommended for production / private pilot: deep scrape + Visa Bulletin, then require scraped KB
-# python scripts/scrape_uscis_data.py --deep --visa-bulletin --max-chapters 40
+# Recommended for production / private pilot: scrape then require scraped KB
+# python scripts/scrape_uscis_data.py --max-chapters 40
 # python scripts/ingest_uscis_data.py --yes --require-scraped
+# Then set REQUIRE_SCRAPED_KB=true (see docs/PUBLIC_LAUNCH.md)
 ```
 
 Chroma persists under `backend/data/chroma_db` when `CHROMA_PERSIST_DIR=./data/chroma_db` (resolved relative to the backend package).
@@ -133,6 +134,13 @@ echo "AUTH_DEV_MODE=true" >> .env
 - **Rate limiting** — free tier (anonymous) and starter tier (API key)
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production deployment.
+For a public or invite-only rollout, follow [docs/PUBLIC_LAUNCH.md](docs/PUBLIC_LAUNCH.md).
+
+### Roadmap (post-launch)
+- **Phase 3** — Checklist / RFE depth  
+- **Phase 4** — Streaming chat  
+- **Phase 5** — Case profile across tabs  
+- **Phase 6** — Scale / hosted-tier polish  
 
 ## ⚖️ Legal Disclaimer
 This tool provides informational guidance only and does not constitute legal advice. Always consult a licensed immigration attorney for your specific case.

@@ -70,7 +70,8 @@ Restores: copy `immi_assist.db` and `chroma_db/` back to `backend/` paths.
 
 ## Production (Docker)
 
-See **[PRODUCTION.md](./PRODUCTION.md)** for the full checklist.
+See **[PRODUCTION.md](./PRODUCTION.md)** for the secrets checklist and
+**[PUBLIC_LAUNCH.md](./PUBLIC_LAUNCH.md)** for invite-only → public rollout steps.
 
 ```bash
 cp .env.example .env

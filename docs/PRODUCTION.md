@@ -55,8 +55,17 @@ Startup **refuses to boot** in production if secrets, Google client ID, or `AUTH
 - DB responds to `SELECT 1`
 - Policy KB docs ≥ `MIN_KNOWLEDGE_BASE_DOCUMENTS`
 - Processing-times collection has at least one doc
+- If `REQUIRE_SCRAPED_KB=true`, `knowledge_base_mode` must be `scraped`
 
-Docker healthchecks use `-f` so containers stay unhealthy until ingest succeeds.
+**Bootstrap order for public deploys**
+
+1. First boot: keep `REQUIRE_SCRAPED_KB=false` so sample ingest can make the backend healthy (scheduler depends on ready).
+2. Run scrape + ingest (scheduler `RUN_REFRESH_ON_START=true`, admin ingest, or manual scripts).
+3. Flip `REQUIRE_SCRAPED_KB=true` and recreate the backend.
+
+Docker healthchecks use `-f` so containers stay unhealthy until readiness succeeds.
+
+For the full public rollout path (DNS, OAuth, invite-only vs open signup, smoke script), see **[PUBLIC_LAUNCH.md](./PUBLIC_LAUNCH.md)**.
 
 ## 5. Database
 
@@ -105,5 +114,6 @@ python scripts/backup_data.py --output ./backups
 
 ## Related
 
+- Public rollout checklist: [PUBLIC_LAUNCH.md](./PUBLIC_LAUNCH.md)
 - Auth details: [AUTH.md](./AUTH.md)
 - Broader deploy notes: [DEPLOYMENT.md](./DEPLOYMENT.md)
