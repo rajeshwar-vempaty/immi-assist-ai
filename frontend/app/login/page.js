@@ -518,8 +518,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     getAuthConfig()
-      .then(setConfig)
-      .catch(() => setConfig({ google_client_id: null, password_auth_enabled: true }));
+      .then((cfg) => {
+        setConfig(cfg);
+        setError(null);
+      })
+      .catch((err) => {
+        setConfig({ google_client_id: null, password_auth_enabled: true });
+        setError(err.message || "Could not load auth settings from the API.");
+      });
   }, []);
 
   useEffect(() => {
@@ -654,7 +660,12 @@ export default function LoginPage() {
                 onError={setError}
               />
             ) : config ? (
-              <p className="disclaimer">Google sign-in is not configured yet.</p>
+              <p className="disclaimer">
+                Google sign-in is not configured yet. Set{" "}
+                <code>GOOGLE_CLIENT_ID</code> in the backend <code>.env</code> to your
+                Google OAuth Web Client ID, restart the API, then refresh this page.
+                Email sign-up still works below.
+              </p>
             ) : (
               <div className="google-btn-wrap">
                 <div className="google-btn-fallback" aria-hidden="true">

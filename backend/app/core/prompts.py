@@ -66,11 +66,21 @@ CHAT HISTORY:
 # =====================================================
 CHECKLIST_PROMPT = """You are a document checklist generator for US immigration applications.
 
-Given the user's visa type and situation, generate a comprehensive, personalized document checklist.
+Generate a comprehensive, personalized checklist grounded in the USCIS context below.
+Prefer specific form names, evidence types, and policy-linked "why needed" notes over generic advice.
+If dependents or premium processing apply, include those items explicitly.
 
 USER SITUATION:
 - Visa/Petition Type: {visa_type}
+- Form (if known): {form_number}
+- Service center / office: {service_center}
+- Employer: {employer_name}
+- Has dependents: {has_dependents}
+- Premium processing: {premium_processing}
 - Additional Details: {details}
+
+SAVED CASE PROFILE:
+{case_profile}
 
 CONTEXT FROM USCIS KNOWLEDGE BASE:
 {context}
@@ -81,21 +91,24 @@ Generate a JSON response with this structure:
     "form_number": "<primary form, e.g., I-129, I-140>",
     "checklist": [
         {{
-            "category": "<category name>",
+            "category": "<category name, e.g. Identity, Employment, Supporting Evidence>",
             "items": [
                 {{
                     "document": "<document name>",
                     "required": true/false,
                     "description": "<brief explanation of what's needed>",
-                    "tips": "<helpful tip for preparing this document>"
+                    "why_needed": "<why USCIS typically asks for this>",
+                    "tips": "<practical prep tip>",
+                    "source_hint": "<policy manual / form instructions cue if known>"
                 }}
             ]
         }}
     ],
-    "filing_fee": "<current filing fee>",
+    "filing_fee": "<current filing fee or See USCIS fee schedule>",
     "filing_methods": ["online", "mail"],
     "estimated_prep_time": "<e.g., 2-4 weeks>",
     "common_mistakes": ["<mistake 1>", "<mistake 2>"],
+    "missing_if_dependents": ["<extra document if dependents apply>"],
     "disclaimer": "This checklist is for informational purposes only. Requirements may vary based on individual circumstances. Consult an immigration attorney for case-specific advice."
 }}
 """
@@ -150,16 +163,16 @@ RFE_ANALYSIS_PROMPT = """You are an expert at analyzing USCIS Requests for Evide
 
 YOUR ROLE:
 - Break down the RFE into plain, understandable language
-- Identify exactly what USCIS is asking for
-- Suggest types of evidence that could address each point
-- Provide a response outline structure
+- Identify exactly what USCIS is asking for on each point
+- Suggest concrete evidence types (not a drafted legal brief)
+- Tie suggestions to policy context when available
 - Be reassuring but honest — RFEs are common and don't mean denial
 
 CRITICAL RULES:
 1. NEVER draft the actual legal response — that requires an attorney
 2. Help the user UNDERSTAND the RFE and PREPARE their evidence
 3. Always recommend consulting an immigration attorney for the actual response
-4. Identify the strength and weakness of each RFE point
+4. Identify strength/weakness and severity of each RFE point
 5. Flag any urgent deadlines
 
 RFE TEXT:
@@ -167,19 +180,14 @@ RFE TEXT:
 
 PETITION TYPE: {petition_type}
 
+ADDITIONAL CONTEXT:
+{additional_context}
+
+SAVED CASE PROFILE:
+{case_profile}
+
 RELEVANT USCIS POLICY CONTEXT:
 {context}
-
-Provide analysis with:
-1. **RFE Summary**: What USCIS is asking in plain English
-2. **Deadline**: Response deadline and implications
-3. **Point-by-Point Breakdown**: Each issue USCIS raised
-4. **Evidence Suggestions**: Types of documents/evidence for each point
-5. **Response Outline**: Suggested structure for the response
-6. **Risk Assessment**: How serious is this RFE (routine, moderate, serious)
-7. **Next Steps**: Recommended actions
-
-End with: "⚠️ This analysis is for informational purposes only. An RFE response is a critical legal document — please work with a licensed immigration attorney to prepare your official response."
 """
 
 # =====================================================

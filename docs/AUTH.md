@@ -31,10 +31,14 @@ OPENAI_API_KEY=...
 2. Create an **OAuth 2.0 Client ID** of type **Web application**.
 3. Add authorized JavaScript origins:
    - `http://localhost:3000`
-   - your production frontend origin
-4. Copy the Client ID into `GOOGLE_CLIENT_ID` in `.env`.
-5. Restart the backend. The login page loads GIS and renders **Continue with Google**.
-6. Ensure `CORS_ORIGINS` includes your frontend origin.
+   - your production frontend origin (and any Cursor/preview origin you use)
+4. Copy the Client ID into **`GOOGLE_CLIENT_ID`** in the backend `.env` (repo root and/or `backend/.env`).
+   Creating the OAuth client in Google alone is not enough — the app reads this env var.
+5. Restart the backend. Confirm `GET /api/v1/auth/config` returns a non-null `google_client_id`.
+6. Refresh `/login` — **Continue with Google** should render. If you still see
+   “Google sign-in is not configured yet”, the env var is empty or the API was not restarted.
+7. Ensure `CORS_ORIGINS` includes your frontend origin when the API is called cross-origin.
+   Local/dev UI defaults to same-origin `/api/v1` (Next.js rewrite), so CORS is usually not needed there.
 
 ## Security decisions
 

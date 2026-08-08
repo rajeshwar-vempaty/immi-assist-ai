@@ -21,7 +21,7 @@ async def create_checklist(
 ):
     auth = AuthContext(user=user, anonymous_session_id=None, api_key_id=None)
     check_rate_limit(db, auth)
-    service = ChecklistService()
+    service = ChecklistService(db=db, user=user)
     result = await service.generate(request)
     record_usage(db, auth, "/checklist")
     return result

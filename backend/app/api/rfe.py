@@ -21,7 +21,7 @@ async def analyze_rfe(
 ):
     auth = AuthContext(user=user, anonymous_session_id=None, api_key_id=None)
     check_rate_limit(db, auth)
-    service = RFEService()
+    service = RFEService(db=db, user=user)
     result = await service.analyze(request)
     record_usage(db, auth, "/rfe/analyze")
     return result

@@ -103,6 +103,8 @@ class Settings(BaseSettings):
 
     # Scheduler
     ingest_interval_hours: int = 168
+    run_refresh_on_start: bool = False
+    scrape_max_chapters: int = 80
 
     # Reverse proxy / TLS
     site_address: str = "localhost"
