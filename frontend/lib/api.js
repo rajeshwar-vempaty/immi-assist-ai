@@ -1,9 +1,14 @@
 /**
  * API client — session JWT via cookie + Authorization header.
  * Provider API keys are NEVER stored in the browser.
+ *
+ * Default to same-origin `/api/v1` so Next.js rewrites proxy to the backend.
+ * That works in localhost and Cursor/browser previews where `localhost:8000`
+ * is not reachable from the user's browser. Override with NEXT_PUBLIC_API_URL
+ * only when the API is on a different public origin.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const TOKEN_KEY = "immi_access_token";
 
 export function getAccessToken() {
@@ -37,11 +42,22 @@ function getHeaders(extra = {}) {
 }
 
 async function apiRequest(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    credentials: "include",
-    headers: getHeaders(options.headers || {}),
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      credentials: "include",
+      headers: getHeaders(options.headers || {}),
+    });
+  } catch (err) {
+    const tip =
+      "Cannot reach the Beacon API. Confirm the backend is running and that " +
+      "the UI uses same-origin /api (Next rewrite) or a reachable NEXT_PUBLIC_API_URL.";
+    const error = new Error(err?.message === "Failed to fetch" ? tip : err?.message || tip);
+    error.status = 0;
+    error.cause = err;
+    throw error;
+  }
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     let message = err.error || `API error: ${response.status}`;
@@ -154,22 +170,32 @@ export function sendChatMessageStream({
   }
 
   const promise = (async () => {
-    const response = await fetch(`${API_BASE}/chat/stream`, {
-      method: "POST",
-      credentials: "include",
-      headers: getHeaders(),
-      signal: controller.signal,
-      body: JSON.stringify({
-        message,
-        chat_history: chatHistory.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
-        conversation_id: conversationId,
-        provider,
-        model,
-      }),
-    });
+    let response;
+    try {
+      response = await fetch(`${API_BASE}/chat/stream`, {
+        method: "POST",
+        credentials: "include",
+        headers: getHeaders(),
+        signal: controller.signal,
+        body: JSON.stringify({
+          message,
+          chat_history: chatHistory.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+          conversation_id: conversationId,
+          provider,
+          model,
+        }),
+      });
+    } catch (err) {
+      if (err?.name === "AbortError") throw err;
+      const tip =
+        "Cannot reach the Beacon API for chat streaming. Confirm the backend is running.";
+      const error = new Error(err?.message === "Failed to fetch" ? tip : err?.message || tip);
+      error.status = 0;
+      throw error;
+    }
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       let messageText = err.error || `API error: ${response.status}`;
