@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "../lib/auth";
 import ChatThinking from "../components/ChatThinking";
+import CaseProfileCard from "../components/CaseProfileCard";
 import {
   analyzeRFE,
   createChecklist,
@@ -18,7 +19,7 @@ import {
   estimateTimeline,
   getHealthReady,
   listConversations,
-  sendChatMessage,
+  sendChatMessageStream,
   truncateConversation,
 } from "../lib/api";
 
@@ -445,7 +446,10 @@ export default function Home() {
   const [checklistResult, setChecklistResult] = useState(null);
   const [rfeText, setRfeText] = useState("");
   const [rfeResult, setRfeResult] = useState(null);
+  const [rfePetition, setRfePetition] = useState("");
   const [kbInfo, setKbInfo] = useState(null);
+  const [caseProfile, setCaseProfile] = useState(null);
+  const streamAbortRef = useRef(null);
 
   const configuredCatalog = useMemo(
     () => (prefs?.catalog || []).filter((c) => c.configured),
@@ -573,6 +577,12 @@ export default function Home() {
     await signOut();
   };
 
+  const stopStreaming = () => {
+    streamAbortRef.current?.abort?.();
+    streamAbortRef.current = null;
+    setChatLoading(false);
+  };
+
   const handleSend = async (messageText = null, baseMessages = null) => {
     const text = messageText || input.trim();
     if (!text || chatLoading) return;
@@ -583,42 +593,121 @@ export default function Home() {
     setError(null);
     const base = baseMessages ?? messages;
     const userMessage = { role: "user", content: text };
-    const next = [...base, userMessage];
+    const next = [...base, userMessage, { role: "assistant", content: "", meta: { streaming: true } }];
     setMessages(next);
     setInput("");
     sessionStorage.removeItem(draftKey);
     setChatLoading(true);
 
+    const assistantIdx = next.length - 1;
+    let finalSources = [];
+    let conversationId = activeChatId;
+
+    const { promise, abort } = sendChatMessageStream({
+      message: text,
+      chatHistory: base,
+      conversationId: activeChatId,
+      provider,
+      model,
+      onEvent: (event) => {
+        if (event.type === "start" && event.conversation_id) {
+          conversationId = event.conversation_id;
+          setActiveChatId(event.conversation_id);
+        }
+        if (event.type === "sources") {
+          finalSources = event.sources || [];
+        }
+        if (event.type === "token" && event.text) {
+          setMessages((prev) => {
+            const copy = [...prev];
+            const cur = copy[assistantIdx] || { role: "assistant", content: "", meta: {} };
+            copy[assistantIdx] = {
+              ...cur,
+              content: (cur.content || "") + event.text,
+              meta: { ...cur.meta, streaming: true },
+            };
+            return copy;
+          });
+        }
+        if (event.type === "replace" && event.text != null) {
+          setMessages((prev) => {
+            const copy = [...prev];
+            copy[assistantIdx] = {
+              role: "assistant",
+              content: event.text,
+              meta: { streaming: true },
+            };
+            return copy;
+          });
+        }
+        if (event.type === "done") {
+          finalSources = event.sources || finalSources;
+          conversationId = event.conversation_id || conversationId;
+          setMessages((prev) => {
+            const copy = [...prev];
+            copy[assistantIdx] = {
+              role: "assistant",
+              content: event.response || copy[assistantIdx]?.content || "",
+              meta: {
+                intent: event.intent,
+                model: event.model_used,
+                provider: event.provider,
+                sources: finalSources,
+                streaming: false,
+              },
+            };
+            return copy;
+          });
+          if (conversationId) setActiveChatId(conversationId);
+        }
+        if (event.type === "error") {
+          setError(event.message || "Chat stream failed");
+        }
+      },
+    });
+    streamAbortRef.current = { abort };
+
     try {
-      const response = await sendChatMessage({
-        message: text,
-        chatHistory: base,
-        conversationId: activeChatId,
-        provider,
-        model,
-      });
-      const assistantMessage = {
-        role: "assistant",
-        content: response.response,
-        meta: {
-          intent: response.intent,
-          model: response.model_used,
-          provider: response.provider,
-          sources: response.sources,
-        },
-      };
-      setMessages([...next, assistantMessage]);
-      setActiveChatId(response.conversation_id);
+      await promise;
       const convData = await listConversations();
       setHistory(convData.conversations || []);
     } catch (err) {
+      if (err.name === "AbortError") {
+        setMessages((prev) => {
+          const copy = [...prev];
+          const cur = copy[assistantIdx];
+          if (cur && !cur.content) {
+            copy[assistantIdx] = {
+              role: "assistant",
+              content: "_(Generation stopped.)_",
+              meta: { streaming: false },
+            };
+          } else if (cur) {
+            copy[assistantIdx] = { ...cur, meta: { ...cur.meta, streaming: false } };
+          }
+          return copy;
+        });
+        return;
+      }
       if (err.status === 401) {
         setError("Session expired. Please sign in again.");
         await handleSignOut();
         return;
       }
       setError(err.message);
+      setMessages((prev) => {
+        const copy = [...prev];
+        if (!copy[assistantIdx]?.content) {
+          return copy.filter((_, i) => i !== assistantIdx);
+        }
+        copy[assistantIdx] = {
+          ...copy[assistantIdx],
+          meta: { ...copy[assistantIdx].meta, streaming: false },
+        };
+        return copy;
+      });
     } finally {
+      streamAbortRef.current = null;
       setChatLoading(false);
     }
   };
@@ -685,7 +774,16 @@ export default function Home() {
     setError(null);
     try {
       setChecklistResult(
-        await createChecklist({ visa_type: visaType, details: checklistDetails })
+        await createChecklist({
+          visa_type: visaType,
+          details: checklistDetails,
+          has_dependents: !!caseProfile?.has_dependents,
+          is_premium_processing: !!caseProfile?.premium_processing,
+          form_number: caseProfile?.form_number || undefined,
+          service_center: caseProfile?.service_center || undefined,
+          employer_name: caseProfile?.employer_name || undefined,
+          use_case_profile: true,
+        })
       );
     } catch (err) {
       setError(err.message);
@@ -699,13 +797,29 @@ export default function Home() {
     setToolLoading(true);
     setError(null);
     try {
-      setRfeResult(await analyzeRFE({ rfe_text: rfeText }));
+      const petition = rfePetition || caseProfile?.visa_type || undefined;
+      setRfeResult(
+        await analyzeRFE({
+          rfe_text: rfeText,
+          petition_type: petition || undefined,
+          additional_context: caseProfile?.notes || "",
+          use_case_profile: true,
+        })
+      );
     } catch (err) {
       setError(err.message);
     } finally {
       setToolLoading(false);
     }
   };
+
+  const applyProfileToTools = useCallback((profile) => {
+    setCaseProfile(profile);
+    if (profile?.visa_type) {
+      setVisaType(profile.visa_type);
+      setRfePetition(profile.visa_type);
+    }
+  }, []);
 
   const initials = (() => {
     const raw = (user.name || user.email || "U").trim();
@@ -910,6 +1024,8 @@ export default function Home() {
             </div>
           )}
 
+          <CaseProfileCard onChange={applyProfileToTools} compact />
+
           {tab === "chat" && (
             <>
               {messages.length === 0 ? (
@@ -998,7 +1114,11 @@ export default function Home() {
                       )}
                     </div>
                   ))}
-                  {chatLoading && <ChatThinking />}
+                  {chatLoading &&
+                    !(
+                      messages[messages.length - 1]?.role === "assistant" &&
+                      messages[messages.length - 1]?.content
+                    ) && <ChatThinking />}
                   <div ref={messagesEndRef} />
                 </div>
               )}
@@ -1008,6 +1128,9 @@ export default function Home() {
           {tab === "checklist" && (
             <section className="panel-stack">
               <h2 className="section-title">Document checklist</h2>
+              <p className="field-hint">
+                Uses your case profile (dependents, premium processing, employer) when saved.
+              </p>
               <select className="select" value={visaType} onChange={(e) => setVisaType(e.target.value)}>
                 {VISA_TYPES.map((v) => (
                   <option key={v.id} value={v.id}>{v.label}</option>
@@ -1026,22 +1149,72 @@ export default function Home() {
                 </button>
               </div>
               {checklistResult && (
-                <div className="result-block">
-                  <h3>
-                    {checklistResult.visa_type} — {checklistResult.form_number}
-                  </h3>
+                <div className="result-block checklist-result">
+                  <div className="result-header-row">
+                    <h3>
+                      {checklistResult.visa_type} — {checklistResult.form_number}
+                    </h3>
+                    {checklistResult.profile_applied ? (
+                      <span className="pill soft">Profile applied</span>
+                    ) : null}
+                  </div>
+                  <p className="meta-line">
+                    Fee: {checklistResult.filing_fee} · Prep: {checklistResult.estimated_prep_time}
+                    {checklistResult.filing_methods?.length
+                      ? ` · Filing: ${checklistResult.filing_methods.join(", ")}`
+                      : ""}
+                  </p>
                   {checklistResult?.checklist?.map((cat, i) => (
                     <div key={i} className="category">
                       <h4>{cat.category}</h4>
-                      <ul>
+                      <ul className="checklist-items">
                         {cat.items.map((item, j) => (
                           <li key={j}>
-                            <strong>{item.document}</strong> — {item.description}
+                            <div className="item-title">
+                              <strong>{item.document}</strong>
+                              <span className={`pill ${item.required ? "req" : "opt"}`}>
+                                {item.required ? "Required" : "Optional"}
+                              </span>
+                            </div>
+                            {item.description ? <p>{item.description}</p> : null}
+                            {item.why_needed ? (
+                              <p className="why-needed"><em>Why:</em> {item.why_needed}</p>
+                            ) : null}
+                            {item.tips ? <p className="tip">Tip: {item.tips}</p> : null}
+                            {item.source_hint ? (
+                              <p className="source-hint">Source cue: {item.source_hint}</p>
+                            ) : null}
                           </li>
                         ))}
                       </ul>
                     </div>
                   ))}
+                  {checklistResult.common_mistakes?.length > 0 && (
+                    <div className="mistakes">
+                      <h4>Common mistakes</h4>
+                      <ul>
+                        {checklistResult.common_mistakes.map((m, i) => (
+                          <li key={i}>{m}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {checklistResult.missing_if_dependents?.length > 0 && (
+                    <div className="mistakes">
+                      <h4>If you have dependents</h4>
+                      <ul>
+                        {checklistResult.missing_if_dependents.map((m, i) => (
+                          <li key={i}>{m}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {checklistResult.sources?.length > 0 && (
+                    <SourceChips sources={checklistResult.sources} />
+                  )}
+                  {checklistResult.disclaimer ? (
+                    <p className="disclaimer-line">{checklistResult.disclaimer}</p>
+                  ) : null}
                 </div>
               )}
             </section>
@@ -1052,6 +1225,19 @@ export default function Home() {
           {tab === "rfe" && (
             <section className="panel-stack">
               <h2 className="section-title">RFE analysis</h2>
+              <p className="field-hint">
+                Point-by-point breakdown with evidence suggestions — not a drafted legal response.
+              </p>
+              <select
+                className="select"
+                value={rfePetition || ""}
+                onChange={(e) => setRfePetition(e.target.value)}
+              >
+                <option value="">Petition type (optional)</option>
+                {VISA_TYPES.map((v) => (
+                  <option key={v.id} value={v.id}>{v.label}</option>
+                ))}
+              </select>
               <textarea
                 className="field"
                 rows={10}
@@ -1070,8 +1256,74 @@ export default function Home() {
                 <p className="field-hint">Paste at least a short RFE excerpt (10+ characters).</p>
               ) : null}
               {rfeResult && (
-                <div className="result-block">
-                  <ReactMarkdown components={markdownComponents}>{rfeResult.summary}</ReactMarkdown>
+                <div className="result-block rfe-result">
+                  <div className="result-header-row">
+                    <h3>Analysis</h3>
+                    <span className={`pill risk-${(rfeResult.risk_level || "moderate").toLowerCase()}`}>
+                      {rfeResult.risk_level || "moderate"}
+                    </span>
+                    {rfeResult.profile_applied ? (
+                      <span className="pill soft">Profile applied</span>
+                    ) : null}
+                  </div>
+                  {rfeResult.deadline_info ? (
+                    <p className="deadline"><strong>Deadline:</strong> {rfeResult.deadline_info}</p>
+                  ) : null}
+                  <div className="rfe-summary">
+                    <ReactMarkdown components={markdownComponents}>{rfeResult.summary}</ReactMarkdown>
+                  </div>
+                  {rfeResult.points?.length > 0 && (
+                    <div className="rfe-points">
+                      <h4>Points raised</h4>
+                      {rfeResult.points.map((p, i) => (
+                        <article key={i} className="rfe-point">
+                          <div className="item-title">
+                            <strong>{p.issue}</strong>
+                            {p.severity ? (
+                              <span className={`pill risk-${p.severity.toLowerCase()}`}>{p.severity}</span>
+                            ) : null}
+                          </div>
+                          {p.what_uscis_wants ? <p>{p.what_uscis_wants}</p> : null}
+                          {p.evidence_suggestions?.length > 0 && (
+                            <ul>
+                              {p.evidence_suggestions.map((s, j) => (
+                                <li key={j}>{s}</li>
+                              ))}
+                            </ul>
+                          )}
+                          {p.policy_anchor ? (
+                            <p className="source-hint">Policy cue: {p.policy_anchor}</p>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  {rfeResult.response_outline?.length > 0 && (
+                    <div>
+                      <h4>Response outline</h4>
+                      <ol>
+                        {rfeResult.response_outline.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                  {rfeResult.next_steps?.length > 0 && (
+                    <div>
+                      <h4>Next steps</h4>
+                      <ul>
+                        {rfeResult.next_steps.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {rfeResult.sources?.length > 0 && (
+                    <SourceChips sources={rfeResult.sources} />
+                  )}
+                  {rfeResult.disclaimer ? (
+                    <p className="disclaimer-line">{rfeResult.disclaimer}</p>
+                  ) : null}
                 </div>
               )}
             </section>
@@ -1082,6 +1334,11 @@ export default function Home() {
         {tab === "chat" && (
           <div className="composer">
             <div className="composer-inner">
+              {chatLoading ? (
+                <button type="button" className="btn btn-ghost stop-stream" onClick={stopStreaming}>
+                  Stop
+                </button>
+              ) : null}
               <textarea
                 rows={1}
                 value={input}

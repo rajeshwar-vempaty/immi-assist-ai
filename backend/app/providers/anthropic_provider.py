@@ -1,5 +1,7 @@
 """Anthropic Claude provider."""
 
+from typing import AsyncIterator
+
 from anthropic import Anthropic
 
 from app.core.config import get_settings
@@ -11,6 +13,16 @@ from app.providers.openai_provider import _map_provider_error
 class AnthropicProvider(AIProvider):
     name = "anthropic"
 
+    def _messages(
+        self, user_message: str, history: list[dict[str, str]] | None
+    ) -> list[dict[str, str]]:
+        messages = []
+        for msg in history or []:
+            if msg.get("role") in ("user", "assistant") and msg.get("content"):
+                messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": user_message})
+        return messages
+
     async def chat(
         self,
         *,
@@ -21,11 +33,7 @@ class AnthropicProvider(AIProvider):
         history: list[dict[str, str]] | None = None,
     ) -> ChatCompletionResult:
         client = Anthropic(api_key=api_key, timeout=get_settings().llm_timeout_seconds)
-        messages = []
-        for msg in history or []:
-            if msg.get("role") in ("user", "assistant") and msg.get("content"):
-                messages.append({"role": msg["role"], "content": msg["content"]})
-        messages.append({"role": "user", "content": user_message})
+        messages = self._messages(user_message, history)
         try:
             response = client.messages.create(
                 model=model,
@@ -38,6 +46,30 @@ class AnthropicProvider(AIProvider):
                 getattr(response.usage, "output_tokens", 0) or 0
             )
             return ChatCompletionResult(content=content, provider=self.name, model=model, tokens_used=tokens)
+        except Exception as exc:
+            raise _map_provider_error(self.name, exc) from exc
+
+    async def chat_stream(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        system_prompt: str,
+        user_message: str,
+        history: list[dict[str, str]] | None = None,
+    ) -> AsyncIterator[str]:
+        client = Anthropic(api_key=api_key, timeout=get_settings().llm_timeout_seconds)
+        messages = self._messages(user_message, history)
+        try:
+            with client.messages.stream(
+                model=model,
+                max_tokens=2048,
+                system=system_prompt,
+                messages=messages,
+            ) as stream:
+                for text in stream.text_stream:
+                    if text:
+                        yield text
         except Exception as exc:
             raise _map_provider_error(self.name, exc) from exc
 

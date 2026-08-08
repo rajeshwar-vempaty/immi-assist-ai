@@ -2,7 +2,7 @@
 
 from unittest.mock import AsyncMock, patch
 
-from app.schemas.schemas import RFEAnalysis
+from app.schemas.schemas import RFEAnalysis, RFEPoint
 
 
 @patch("app.api.rfe.RFEService")
@@ -14,7 +14,14 @@ def test_rfe_endpoint(MockService, client, auth_login):
             summary="USCIS requests additional evidence of specialty occupation.",
             deadline_info="Respond within 87 days.",
             risk_level="moderate",
-            points=[{"issue": "Specialty occupation", "evidence_suggestions": ["Job description"]}],
+            points=[
+                RFEPoint(
+                    issue="Specialty occupation",
+                    what_uscis_wants="Show the role requires a bachelor's degree",
+                    evidence_suggestions=["Job description"],
+                    severity="moderate",
+                )
+            ],
             response_outline=["Cover letter", "Exhibits"],
             next_steps=["Consult attorney"],
             disclaimer="Informational only.",

@@ -77,6 +77,35 @@ class ChatResponse(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
+# ----- Case Profile -----
+
+class CaseProfileUpdate(BaseModel):
+    visa_type: Optional[str] = Field(None, max_length=32)
+    form_number: Optional[str] = Field(None, max_length=32)
+    service_center: Optional[str] = Field(None, max_length=128)
+    office_code: Optional[str] = Field(None, max_length=64)
+    priority_date: Optional[str] = Field(None, max_length=32)
+    country_of_chargeability: Optional[str] = Field(None, max_length=128)
+    has_dependents: Optional[bool] = None
+    premium_processing: Optional[bool] = None
+    employer_name: Optional[str] = Field(None, max_length=255)
+    notes: Optional[str] = Field(None, max_length=4000)
+
+
+class CaseProfileResponse(BaseModel):
+    visa_type: Optional[str] = None
+    form_number: Optional[str] = None
+    service_center: Optional[str] = None
+    office_code: Optional[str] = None
+    priority_date: Optional[str] = None
+    country_of_chargeability: Optional[str] = None
+    has_dependents: bool = False
+    premium_processing: bool = False
+    employer_name: Optional[str] = None
+    notes: str = ""
+    updated_at: Optional[datetime] = None
+
+
 # ----- Document Checklist -----
 
 class ChecklistRequest(BaseModel):
@@ -84,6 +113,10 @@ class ChecklistRequest(BaseModel):
     details: str = Field(default="", max_length=2000, description="Additional context about your situation")
     has_dependents: bool = False
     is_premium_processing: bool = False
+    use_case_profile: bool = True
+    form_number: Optional[str] = Field(None, max_length=32)
+    service_center: Optional[str] = Field(None, max_length=128)
+    employer_name: Optional[str] = Field(None, max_length=255)
 
 
 class ChecklistItem(BaseModel):
@@ -91,6 +124,8 @@ class ChecklistItem(BaseModel):
     required: bool
     description: str
     tips: str = ""
+    why_needed: str = ""
+    source_hint: str = ""
 
 
 class ChecklistCategory(BaseModel):
@@ -105,6 +140,10 @@ class ChecklistResponse(BaseModel):
     filing_fee: str
     estimated_prep_time: str
     common_mistakes: list[str]
+    missing_if_dependents: list[str] = Field(default_factory=list)
+    filing_methods: list[str] = Field(default_factory=list)
+    sources: list[SourceRef] = Field(default_factory=list)
+    profile_applied: bool = False
     disclaimer: str
 
 
@@ -142,13 +181,24 @@ class RFERequest(BaseModel):
     rfe_text: str = Field(..., min_length=10, max_length=20000, description="The RFE notice text")
     petition_type: Optional[VisaType] = None
     additional_context: str = Field(default="", max_length=5000)
+    use_case_profile: bool = True
+
+
+class RFEPoint(BaseModel):
+    issue: str
+    what_uscis_wants: str = ""
+    evidence_suggestions: list[str] = Field(default_factory=list)
+    severity: str = "moderate"  # routine | moderate | serious
+    policy_anchor: str = ""
 
 
 class RFEAnalysis(BaseModel):
     summary: str
     deadline_info: str
     risk_level: str  # routine, moderate, serious
-    points: list[dict]  # {"issue": ..., "evidence_suggestions": [...]}
-    response_outline: list[str]
-    next_steps: list[str]
+    points: list[RFEPoint] = Field(default_factory=list)
+    response_outline: list[str] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
+    sources: list[SourceRef] = Field(default_factory=list)
+    profile_applied: bool = False
     disclaimer: str

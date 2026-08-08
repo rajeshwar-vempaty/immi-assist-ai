@@ -3,6 +3,7 @@
 import logging
 import re
 from datetime import datetime
+from typing import Any, AsyncIterator
 
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from app.core.prompts import (
 from app.models.models import Message, User
 from app.providers import get_provider
 from app.schemas.schemas import ChatRequest, ChatResponse
+from app.services import case_profile_service as profiles
 from app.services import conversation_service as convs
 from app.services import credentials_service as creds
 from app.services.llm_json_service import extract_json
@@ -177,6 +179,108 @@ class ChatService:
         self.user = user
         self.rag_service = get_rag_service()
 
+    async def _build_system_prompt(
+        self,
+        *,
+        intent: Intent,
+        message: str,
+        visa_type: str | None,
+        context: str,
+        chat_history_str: str,
+    ) -> tuple[str, dict | None]:
+        profile = profiles.get_profile(self.db, self.user)
+        case_block = profiles.format_profile_context(profile)
+        official = None
+
+        if intent == Intent.CHECKLIST:
+            system_prompt = CHECKLIST_PROMPT.format(
+                visa_type=visa_type or profile.visa_type or "Unknown",
+                form_number=profile.form_number or "Unknown",
+                service_center=profile.service_center or "Unknown",
+                employer_name=profile.employer_name or "Not provided",
+                has_dependents="yes" if profile.has_dependents else "no",
+                premium_processing="yes" if profile.premium_processing else "no",
+                details=message,
+                case_profile=case_block,
+                context=context,
+            )
+        elif intent == Intent.RFE_HELP:
+            system_prompt = RFE_ANALYSIS_PROMPT.format(
+                rfe_text=message,
+                petition_type=visa_type or profile.visa_type or "Unknown",
+                additional_context=profile.notes or "None provided.",
+                case_profile=case_block,
+                context=context,
+            )
+        elif intent == Intent.TIMELINE:
+            form_type = _resolve_timeline_form_type(
+                visa_type or profile.form_number, message
+            )
+            official = await lookup_official_time(
+                message=message,
+                form_type=form_type,
+                category=visa_type or profile.visa_type,
+            )
+            processing_data = context
+            if official:
+                processing_data = (
+                    f"{format_official_block(official)}\n\n---\nSupporting notes:\n{context}"
+                )
+            system_prompt = TIMELINE_PROMPT.format(
+                form_type=form_type,
+                service_center=profile.service_center or "Unknown",
+                filing_date=profile.priority_date or "Not provided",
+                category=visa_type or profile.visa_type or "General",
+                processing_data=processing_data,
+                context=context,
+            )
+        else:
+            profile_note = f"\n\nSAVED CASE PROFILE:\n{case_block}" if case_block else ""
+            system_prompt = POLICY_QA_PROMPT.format(
+                context=context + profile_note,
+                question=message,
+                chat_history=chat_history_str or "No prior history.",
+            )
+        return system_prompt, official
+
+    def _finalize_text(
+        self,
+        *,
+        intent: Intent,
+        content: str,
+        sources: list,
+        official: dict | None,
+        confidence: float,
+    ) -> str:
+        response_text = _humanize_structured_response(intent, content)
+        if intent == Intent.TIMELINE and official and official.get("months") is not None:
+            months = official["months"]
+            source = official.get("source", "snapshot")
+            as_of = official.get("as_of") or official.get("publication_date")
+            url = official.get("uscis_url") or "https://egov.uscis.gov/processing-times/"
+            banner = (
+                f"**USCIS published figure:** 80% of cases in this category are completed within "
+                f"**{months} months** "
+                f"({source}{f', as of {as_of}' if as_of else ''}). "
+                f"[Verify on USCIS]({url})\n\n"
+            )
+            if f"{months} months" not in response_text[:280]:
+                response_text = banner + response_text
+
+        confidence_warning = check_confidence(confidence)
+        if confidence_warning:
+            response_text = confidence_warning + "\n\n" + response_text
+
+        disclaimer_type = {
+            Intent.RFE_HELP: "rfe",
+            Intent.TIMELINE: "timeline",
+        }.get(intent, "standard")
+        response_text = inject_disclaimer(response_text, disclaimer_type)
+        citation_block = format_citations(sources)
+        if citation_block and citation_block not in response_text:
+            response_text = response_text + citation_block
+        return response_text
+
     async def process(self, request: ChatRequest) -> ChatResponse:
         provider, model, api_key = creds.resolve_provider_model(
             self.db,
@@ -222,7 +326,7 @@ class ChatService:
         collection = "processing_times" if intent == Intent.TIMELINE else "uscis_policy"
         retrieved_docs = self.rag_service.retrieve(
             query=request.message,
-            n_results=5,
+            n_results=8,
             collection_name=collection,
         )
         context, sources = self.rag_service.format_context(retrieved_docs)
@@ -233,7 +337,6 @@ class ChatService:
             .order_by(Message.created_at.asc())
             .all()
         )
-        # Exclude the user message we just persisted
         history_msgs = [{"role": m.role, "content": m.content} for m in prior[:-1]][-6:]
         if not history_msgs and request.chat_history:
             history_msgs = [
@@ -244,43 +347,13 @@ class ChatService:
             [f"{msg['role']}: {msg['content']}" for msg in history_msgs]
         )
 
-        official = None
-        if intent == Intent.CHECKLIST:
-            system_prompt = CHECKLIST_PROMPT.format(
-                visa_type=visa_type or "Unknown",
-                details=request.message,
-                context=context,
-            )
-        elif intent == Intent.RFE_HELP:
-            system_prompt = RFE_ANALYSIS_PROMPT.format(
-                rfe_text=request.message,
-                petition_type=visa_type or "Unknown",
-                context=context,
-            )
-        elif intent == Intent.TIMELINE:
-            form_type = _resolve_timeline_form_type(visa_type, request.message)
-            official = await lookup_official_time(
-                message=request.message,
-                form_type=form_type,
-                category=visa_type,
-            )
-            processing_data = context
-            if official:
-                processing_data = f"{format_official_block(official)}\n\n---\nSupporting notes:\n{context}"
-            system_prompt = TIMELINE_PROMPT.format(
-                form_type=form_type,
-                service_center="Unknown",
-                filing_date="Not provided",
-                category=visa_type or "General",
-                processing_data=processing_data,
-                context=context,
-            )
-        else:
-            system_prompt = POLICY_QA_PROMPT.format(
-                context=context,
-                question=request.message,
-                chat_history=chat_history_str or "No prior history.",
-            )
+        system_prompt, official = await self._build_system_prompt(
+            intent=intent,
+            message=request.message,
+            visa_type=visa_type,
+            context=context,
+            chat_history_str=chat_history_str,
+        )
 
         adapter = get_provider(provider)
         result = await adapter.chat(
@@ -291,33 +364,13 @@ class ChatService:
             history=history_msgs,
         )
 
-        response_text = _humanize_structured_response(intent, result.content)
-        if intent == Intent.TIMELINE and official and official.get("months") is not None:
-            months = official["months"]
-            source = official.get("source", "snapshot")
-            as_of = official.get("as_of") or official.get("publication_date")
-            url = official.get("uscis_url") or "https://egov.uscis.gov/processing-times/"
-            banner = (
-                f"**USCIS published figure:** 80% of cases in this category are completed within "
-                f"**{months} months** "
-                f"({source}{f', as of {as_of}' if as_of else ''}). "
-                f"[Verify on USCIS]({url})\n\n"
-            )
-            if f"{months} months" not in response_text[:280]:
-                response_text = banner + response_text
-
-        confidence_warning = check_confidence(confidence)
-        if confidence_warning:
-            response_text = confidence_warning + "\n\n" + response_text
-
-        disclaimer_type = {
-            Intent.RFE_HELP: "rfe",
-            Intent.TIMELINE: "timeline",
-        }.get(intent, "standard")
-        response_text = inject_disclaimer(response_text, disclaimer_type)
-        citation_block = format_citations(sources)
-        if citation_block and citation_block not in response_text:
-            response_text = response_text + citation_block
+        response_text = self._finalize_text(
+            intent=intent,
+            content=result.content,
+            sources=sources,
+            official=official,
+            confidence=confidence,
+        )
 
         convs.add_message(
             self.db,
@@ -342,3 +395,148 @@ class ChatService:
             session_id=conversation.id,
             timestamp=datetime.utcnow(),
         )
+
+    async def stream(self, request: ChatRequest) -> AsyncIterator[dict[str, Any]]:
+        """Yield SSE event payloads for progressive chat rendering."""
+        provider, model, api_key = creds.resolve_provider_model(
+            self.db,
+            self.user,
+            request.provider,
+            request.model,
+        )
+
+        if request.conversation_id:
+            conversation = convs.get_conversation(self.db, self.user, request.conversation_id)
+        else:
+            conversation = convs.create_conversation(self.db, self.user)
+
+        convs.add_message(self.db, conversation, role="user", content=request.message)
+
+        intent = _keyword_intent(request.message)
+        confidence = 0.7
+        visa_type = _detect_visa_type(request.message)
+
+        yield {
+            "type": "start",
+            "conversation_id": conversation.id,
+            "intent": intent.value,
+            "provider": provider if intent != Intent.CASE_SPECIFIC else "system",
+            "model": model if intent != Intent.CASE_SPECIFIC else "system",
+        }
+
+        if intent == Intent.CASE_SPECIFIC:
+            response_text = CASE_SPECIFIC_REDIRECT
+            yield {"type": "token", "text": response_text}
+            convs.add_message(
+                self.db,
+                conversation,
+                role="assistant",
+                content=response_text,
+                provider="system",
+                model="system",
+                intent=intent.value,
+            )
+            yield {
+                "type": "done",
+                "response": response_text,
+                "intent": intent.value,
+                "confidence": confidence,
+                "model_used": "system",
+                "provider": "system",
+                "sources": [],
+                "requires_lawyer": True,
+                "conversation_id": conversation.id,
+            }
+            return
+
+        collection = "processing_times" if intent == Intent.TIMELINE else "uscis_policy"
+        retrieved_docs = self.rag_service.retrieve(
+            query=request.message,
+            n_results=8,
+            collection_name=collection,
+        )
+        context, sources = self.rag_service.format_context(retrieved_docs)
+        yield {"type": "sources", "sources": sources}
+
+        prior = (
+            self.db.query(Message)
+            .filter(Message.conversation_id == conversation.id)
+            .order_by(Message.created_at.asc())
+            .all()
+        )
+        history_msgs = [{"role": m.role, "content": m.content} for m in prior[:-1]][-6:]
+        if not history_msgs and request.chat_history:
+            history_msgs = [
+                {"role": m.role, "content": m.content} for m in request.chat_history[-6:]
+            ]
+        chat_history_str = "\n".join(
+            [f"{msg['role']}: {msg['content']}" for msg in history_msgs]
+        )
+
+        system_prompt, official = await self._build_system_prompt(
+            intent=intent,
+            message=request.message,
+            visa_type=visa_type,
+            context=context,
+            chat_history_str=chat_history_str,
+        )
+
+        adapter = get_provider(provider)
+        raw_parts: list[str] = []
+        async for delta in adapter.chat_stream(
+            api_key=api_key,
+            model=model,
+            system_prompt=system_prompt,
+            user_message=request.message,
+            history=history_msgs,
+        ):
+            raw_parts.append(delta)
+            # Stream raw model tokens for POLICY_QA; structured intents finalize later.
+            if intent == Intent.POLICY_QA:
+                yield {"type": "token", "text": delta}
+
+        raw_content = "".join(raw_parts)
+        response_text = self._finalize_text(
+            intent=intent,
+            content=raw_content,
+            sources=sources,
+            official=official,
+            confidence=confidence,
+        )
+
+        if intent != Intent.POLICY_QA:
+            # Emit finalized structured answer as progressive chunks.
+            step = 64
+            for i in range(0, len(response_text), step):
+                yield {"type": "token", "text": response_text[i : i + step]}
+        else:
+            # Append disclaimer/citations that were not in the live stream.
+            suffix = response_text[len(raw_content) :] if response_text.startswith(raw_content) else ""
+            if suffix:
+                yield {"type": "token", "text": suffix}
+            elif response_text != raw_content:
+                # Fallback: replace with finalized text if transformation was non-suffix.
+                yield {"type": "replace", "text": response_text}
+
+        convs.add_message(
+            self.db,
+            conversation,
+            role="assistant",
+            content=response_text,
+            provider=provider,
+            model=model,
+            intent=intent.value,
+            sources=sources,
+        )
+
+        yield {
+            "type": "done",
+            "response": response_text,
+            "intent": intent.value,
+            "confidence": confidence,
+            "model_used": model,
+            "provider": provider,
+            "sources": sources,
+            "requires_lawyer": False,
+            "conversation_id": conversation.id,
+        }

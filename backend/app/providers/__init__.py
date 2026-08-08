@@ -52,6 +52,28 @@ class AIProvider(ABC):
     ) -> ChatCompletionResult:
         raise NotImplementedError
 
+    async def chat_stream(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        system_prompt: str,
+        user_message: str,
+        history: list[dict[str, str]] | None = None,
+    ) -> AsyncIterator[str]:
+        """Yield text deltas. Default: one-shot chat then chunk the result."""
+        result = await self.chat(
+            api_key=api_key,
+            model=model,
+            system_prompt=system_prompt,
+            user_message=user_message,
+            history=history,
+        )
+        text = result.content or ""
+        step = 48
+        for i in range(0, len(text), step):
+            yield text[i : i + step]
+
     @abstractmethod
     async def validate_key(self, api_key: str) -> bool:
         raise NotImplementedError

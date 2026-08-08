@@ -37,6 +37,9 @@ class User(Base):
     preferences: Mapped["UserPreferences | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    case_profile: Mapped["UserCaseProfile | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
     conversations: Mapped[list["Conversation"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -89,6 +92,31 @@ class UserPreferences(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user: Mapped["User"] = relationship(back_populates="preferences")
+
+
+class UserCaseProfile(Base):
+    """Persisted immigration case context reused across Chat / Checklist / Timeline / RFE."""
+
+    __tablename__ = "user_case_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True
+    )
+    visa_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    form_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    service_center: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    office_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    priority_date: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    country_of_chargeability: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    has_dependents: Mapped[bool] = mapped_column(Boolean, default=False)
+    premium_processing: Mapped[bool] = mapped_column(Boolean, default=False)
+    employer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="case_profile")
 
 
 class Conversation(Base):

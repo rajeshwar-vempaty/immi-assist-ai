@@ -136,9 +136,9 @@ echo "AUTH_DEV_MODE=true" >> .env
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production deployment.
 For a public or invite-only rollout, follow [docs/PUBLIC_LAUNCH.md](docs/PUBLIC_LAUNCH.md).
 
-### Roadmap (post-launch)
-- **Phase 3** — Checklist / RFE depth  
-- **Phase 4** — Streaming chat  
+### Roadmap
+- **Phase 3** — Checklist / RFE depth (richer structured outputs + sources)  
+- **Phase 4** — Streaming chat + stop  
 - **Phase 5** — Case profile across tabs  
 - **Phase 6** — Scale / hosted-tier polish  
 

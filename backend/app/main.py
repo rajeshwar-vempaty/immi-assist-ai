@@ -8,7 +8,7 @@ import sys
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, chat, checklist, conversations, health, rfe, timeline
+from app.api import admin, auth, case_profile, chat, checklist, conversations, health, rfe, timeline
 from app.api import settings as settings_api
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
@@ -98,9 +98,9 @@ def create_app() -> FastAPI:
     app.include_router(rfe.router, prefix="/api/v1", tags=["RFE"])
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(settings_api.router, prefix="/api/v1")
+    app.include_router(case_profile.router, prefix="/api/v1")
     app.include_router(conversations.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
-
     @app.get("/")
     async def root():
         payload = {
